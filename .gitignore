@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Build
+frontend/dist/
+*.egg-info/
+
+# Data & DB
+data/
+*.db
+*.sqlite
+
+# Environment
+.env
+.env.local
+
+# Screenshots & temp files
+*.png
+*.ps1
+*.vbs
+nul
+dash2_done.txt
+test_*.py
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

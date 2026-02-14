@@ -1,0 +1,79 @@
+# MITRE ATT&CK Mapping Rules
+# Maps finding categories/types to ATT&CK techniques
+
+rules:
+  # Exposure findings
+  - match:
+      category: exposure
+      source_check: admin_exposure
+    technique_id: T1133
+    technique_name: "External Remote Services"
+    tactic: "Initial Access"
+    confidence: 0.8
+
+  - match:
+      category: exposure
+      source_check: upnp_check
+    technique_id: T1090
+    technique_name: "Proxy"
+    tactic: "Command and Control"
+    confidence: 0.6
+
+  # Vulnerability findings
+  - match:
+      category: vuln
+      source_check: ssh_hardening
+    technique_id: T1021.004
+    technique_name: "Remote Services: SSH"
+    tactic: "Lateral Movement"
+    confidence: 0.7
+
+  - match:
+      category: vuln
+      source_check: tls_check
+    technique_id: T1557
+    technique_name: "Adversary-in-the-Middle"
+    tactic: "Credential Access"
+    confidence: 0.6
+
+  # Misconfiguration findings
+  - match:
+      category: misconfig
+      source_check: http_headers
+    technique_id: T1189
+    technique_name: "Drive-by Compromise"
+    tactic: "Initial Access"
+    confidence: 0.5
+
+  - match:
+      category: misconfig
+      source_check: dns_check
+    technique_id: T1071.004
+    technique_name: "Application Layer Protocol: DNS"
+    tactic: "Command and Control"
+    confidence: 0.5
+
+  # Default service mappings
+  - match:
+      category: exposure
+      title_contains: "open port 22"
+    technique_id: T1021.004
+    technique_name: "Remote Services: SSH"
+    tactic: "Lateral Movement"
+    confidence: 0.5
+
+  - match:
+      category: exposure
+      title_contains: "open port 80"
+    technique_id: T1071.001
+    technique_name: "Application Layer Protocol: Web Protocols"
+    tactic: "Command and Control"
+    confidence: 0.4
+
+  - match:
+      category: exposure
+      title_contains: "open port 443"
+    technique_id: T1071.001
+    technique_name: "Application Layer Protocol: Web Protocols"
+    tactic: "Command and Control"
+    confidence: 0.4

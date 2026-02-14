@@ -1,0 +1,61 @@
+# Home Network Zone Model
+zones:
+  lan:
+    name: "LAN"
+    description: "Primary local network (workstations, servers)"
+    trust_level: high
+    typical_assets:
+      - workstation
+      - nas
+      - printer
+    default_criticality: medium
+
+  iot:
+    name: "IoT"
+    description: "IoT device network (smart home, cameras)"
+    trust_level: low
+    typical_assets:
+      - smart_speaker
+      - camera
+      - thermostat
+      - smart_plug
+    default_criticality: low
+
+  guest:
+    name: "Guest"
+    description: "Guest network (isolated)"
+    trust_level: very_low
+    typical_assets:
+      - mobile
+      - laptop
+    default_criticality: low
+
+  dmz:
+    name: "DMZ"
+    description: "Exposed services (if any)"
+    trust_level: medium
+    typical_assets:
+      - web_server
+      - vpn_gateway
+    default_criticality: high
+
+trust_boundaries:
+  - name: "WAN ↔ Router"
+    from_zone: external
+    to_zone: dmz
+    controls: ["firewall", "nat"]
+
+  - name: "Router ↔ LAN"
+    from_zone: dmz
+    to_zone: lan
+    controls: ["firewall_rules"]
+
+  - name: "LAN ↔ IoT"
+    from_zone: lan
+    to_zone: iot
+    controls: ["vlan_isolation"]
+
+  - name: "LAN ↔ Guest"
+    from_zone: lan
+    to_zone: guest
+    controls: ["vlan_isolation", "client_isolation"]

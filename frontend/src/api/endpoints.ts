@@ -1,0 +1,105 @@
+import api from './client'
+import type { PaginatedResponse, Asset, Finding, Threat, Risk, MitreMapping, Run } from '../types'
+
+// Assets
+export const assetsApi = {
+  list: (params?: Record<string, any>) => api.get<PaginatedResponse<Asset>>('/assets', { params }),
+  get: (id: string) => api.get<Asset>(`/assets/${id}`),
+  create: (data: Partial<Asset>) => api.post<Asset>('/assets', data),
+  update: (id: string, data: Partial<Asset>) => api.put<Asset>(`/assets/${id}`, data),
+  delete: (id: string) => api.delete(`/assets/${id}`),
+  override: (id: string, data: { field: string; value: any; rationale: string }) =>
+    api.post(`/assets/${id}/override`, data),
+}
+
+// Findings
+export const findingsApi = {
+  list: (params?: Record<string, any>) => api.get<PaginatedResponse<Finding>>('/findings', { params }),
+  get: (id: string) => api.get<Finding>(`/findings/${id}`),
+  create: (data: Partial<Finding>) => api.post<Finding>('/findings', data),
+  update: (id: string, data: Partial<Finding>) => api.put<Finding>(`/findings/${id}`, data),
+  override: (id: string, data: { field: string; value: any; rationale: string }) =>
+    api.post(`/findings/${id}/override`, data),
+}
+
+// Threats
+export const threatsApi = {
+  list: (params?: Record<string, any>) => api.get<PaginatedResponse<Threat>>('/threats', { params }),
+  get: (id: string) => api.get<Threat>(`/threats/${id}`),
+  create: (data: Partial<Threat>) => api.post<Threat>('/threats', data),
+  update: (id: string, data: Partial<Threat>) => api.put<Threat>(`/threats/${id}`, data),
+  delete: (id: string) => api.delete(`/threats/${id}`),
+}
+
+// Risks
+export const risksApi = {
+  list: (params?: Record<string, any>) => api.get<PaginatedResponse<Risk>>('/risks', { params }),
+  get: (id: string) => api.get<Risk>(`/risks/${id}`),
+  getFullContext: (id: string) => api.get(`/risks/${id}/full-context`),
+  matrix: () => api.get('/risks/matrix'),
+  analyze: (data?: { asset_id?: string; run_id?: string }) => api.post('/risks/analyze', data || {}),
+  create: (data: Partial<Risk>) => api.post<Risk>('/risks', data),
+  update: (id: string, data: Partial<Risk>) => api.put<Risk>(`/risks/${id}`, data),
+  treat: (id: string, data: any) => api.post(`/risks/${id}/treatment`, data),
+  override: (id: string, data: { field: string; value: any; rationale: string }) =>
+    api.post(`/risks/${id}/override`, data),
+}
+
+// MITRE
+export const mitreApi = {
+  listMappings: (params?: Record<string, any>) => api.get<PaginatedResponse<MitreMapping>>('/mitre/mappings', { params }),
+  createMapping: (data: Partial<MitreMapping>) => api.post<MitreMapping>('/mitre/mappings', data),
+  exportLayer: () => api.get('/mitre/layer-export'),
+}
+
+// Runs
+export const runsApi = {
+  list: (params?: Record<string, any>) => api.get<PaginatedResponse<Run>>('/runs', { params }),
+  get: (id: string) => api.get<Run>(`/runs/${id}`),
+  create: (data?: any) => api.post<Run>('/runs', data || {}),
+  pause: (id: string) => api.post(`/runs/${id}/pause`),
+  resume: (id: string) => api.post(`/runs/${id}/resume`),
+  cancel: (id: string) => api.post(`/runs/${id}/cancel`),
+  executeStep: (stepName: string) => api.post(`/runs/step/${stepName}`),
+}
+
+// Reports
+export const reportsApi = {
+  generate: (data: { report_type: string; run_id?: string }) => api.post('/reports/generate', null, { params: data }),
+  get: (id: string) => api.get(`/reports/${id}`),
+  download: (id: string) => api.get(`/reports/${id}/download`, { responseType: 'blob' }),
+}
+
+// Copilot
+export const copilotApi = {
+  triage: (findingIds: string[]) => api.post('/copilot/triage', { finding_ids: findingIds }),
+  remediation: (findingId: string, context?: any) => api.post('/copilot/remediation', { finding_id: findingId, context }),
+  mitreSuggest: (findingId: string) => api.post('/copilot/mitre-suggest', null, { params: { finding_id: findingId } }),
+  narrative: (data: any) => api.post('/copilot/narrative', data),
+  suggestions: () => api.get('/copilot/suggestions'),
+}
+
+// Settings
+export const settingsApi = {
+  getPolicy: () => api.get('/settings/policy'),
+  updatePolicy: (data: any) => api.put('/settings/policy', data),
+  getAiConfig: () => api.get('/settings/ai-config'),
+  updateAiConfig: (data: any) => api.put('/settings/ai-config', null, { params: data }),
+}
+
+// Health
+export const healthApi = {
+  check: () => api.get('/health'),
+}
+
+// Nmap Scanner
+export const nmapApi = {
+  listProfiles: () => api.get('/nmap/profiles'),
+  scan: (data: { asset_id?: string | null; target?: string | null; profile_id: string; run_id?: string; params?: Record<string, any> }) =>
+    api.post('/nmap/scan', data),
+  results: (params?: Record<string, any>) => api.get('/nmap/results', { params }),
+  verify: (data: { asset_id: string; finding_ids?: string[]; run_id?: string }) =>
+    api.post('/nmap/verify', data),
+  assessRisk: (data: { asset_id: string; finding_ids?: string[]; run_id?: string }) =>
+    api.post('/nmap/assess-risk', data),
+}

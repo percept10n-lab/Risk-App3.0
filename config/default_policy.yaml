@@ -1,0 +1,34 @@
+# Default Action Policy
+name: "Default Home Network Policy"
+description: "Standard policy for home network scanning"
+
+scope:
+  allowlist:
+    - "192.168.0.0/16"
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+  denylist: []
+
+actions:
+  allowlist:
+    - arp_scan
+    - ping_sweep
+    - port_scan
+    - service_detection
+    - http_check
+    - tls_check
+    - ssh_check
+    - dns_check
+    - mdns_discovery
+    - ssdp_discovery
+    - upnp_check
+    - admin_exposure_check
+
+rate_limits:
+  scan: "100/min"
+  check: "50/min"
+  pentest_action: "10/min"
+
+time_windows:
+  allowed_hours: "00:00-23:59"
+  maintenance_window: null

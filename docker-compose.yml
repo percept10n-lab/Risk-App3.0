@@ -1,0 +1,27 @@
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/backend/data
+      - ./config:/app/backend/config
+    environment:
+      - RISK_DATABASE_URL=sqlite+aiosqlite:///data/risk_platform.db
+      - RISK_DEBUG=true
+      - RISK_DATA_DIR=data
+      - RISK_CONFIG_DIR=config
+      - RISK_ARTIFACTS_DIR=data/artifacts
+      - PYTHONPATH=/app/backend:/app
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN

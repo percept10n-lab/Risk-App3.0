@@ -1,0 +1,61 @@
+# ISO 27005 Risk Matrix Configuration
+name: "Default Risk Matrix (5x5)"
+description: "Standard 5-level likelihood x 5-level impact matrix"
+
+likelihood_levels:
+  - very_low
+  - low
+  - medium
+  - high
+  - very_high
+
+impact_levels:
+  - negligible
+  - low
+  - medium
+  - high
+  - critical
+
+risk_levels:
+  - low
+  - medium
+  - high
+  - critical
+
+# Matrix: likelihood (row) x impact (column) = risk_level
+matrix:
+  very_low:
+    negligible: low
+    low: low
+    medium: low
+    high: medium
+    critical: medium
+  low:
+    negligible: low
+    low: low
+    medium: medium
+    high: medium
+    critical: high
+  medium:
+    negligible: low
+    low: medium
+    medium: medium
+    high: high
+    critical: high
+  high:
+    negligible: medium
+    low: medium
+    medium: high
+    high: high
+    critical: critical
+  very_high:
+    negligible: medium
+    low: high
+    medium: high
+    high: critical
+    critical: critical
+
+# Treatment thresholds
+thresholds:
+  accept_max: medium      # Maximum risk level that can be accepted
+  escalation: critical     # Risk level that requires immediate escalation

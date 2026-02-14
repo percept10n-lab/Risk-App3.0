@@ -1,0 +1,125 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
+
+from app.database import get_db
+from app.services.copilot_service import CopilotService
+
+router = APIRouter()
+
+
+class TriageRequest(BaseModel):
+    finding_ids: list[str] = []
+
+
+class RemediationRequest(BaseModel):
+    finding_id: str
+    context: dict = {}
+
+
+class NarrativeRequest(BaseModel):
+    run_id: str | None = None
+    scope: str = "summary"
+
+
+class InvestigateRequest(BaseModel):
+    finding_id: str
+
+
+class ExecuteRemediationRequest(BaseModel):
+    finding_id: str
+    action: str = "set_in_progress"
+    params: dict = {}
+
+
+class VerifyRequest(BaseModel):
+    finding_id: str
+    action_id: str = "port_verify"
+    target: str | None = None
+
+
+@router.post("/triage")
+async def triage_findings(request: TriageRequest, db: AsyncSession = Depends(get_db)):
+    """AI-assisted triage of findings by priority."""
+    service = CopilotService(db)
+    return await service.triage_findings(
+        finding_ids=request.finding_ids if request.finding_ids else None
+    )
+
+
+@router.post("/remediation")
+async def suggest_remediation(request: RemediationRequest, db: AsyncSession = Depends(get_db)):
+    """Generate remediation plan for a finding."""
+    service = CopilotService(db)
+    result = await service.suggest_remediation(
+        finding_id=request.finding_id,
+        context=request.context,
+    )
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.post("/mitre-suggest")
+async def suggest_mitre(finding_id: str, db: AsyncSession = Depends(get_db)):
+    """Suggest MITRE ATT&CK mappings for a finding."""
+    service = CopilotService(db)
+    result = await service.suggest_mitre_mappings(finding_id)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.post("/narrative")
+async def generate_narrative(request: NarrativeRequest, db: AsyncSession = Depends(get_db)):
+    """Generate narrative summary of assessment results."""
+    service = CopilotService(db)
+    return await service.generate_narrative(
+        run_id=request.run_id,
+        scope=request.scope,
+    )
+
+
+@router.get("/suggestions")
+async def list_suggestions(db: AsyncSession = Depends(get_db)):
+    """List all AI-generated suggestions."""
+    service = CopilotService(db)
+    return await service.get_all_suggestions()
+
+
+@router.post("/investigate")
+async def investigate_finding(request: InvestigateRequest, db: AsyncSession = Depends(get_db)):
+    """Step 1: Investigate a finding — gather full context, analysis, and remediation plan."""
+    service = CopilotService(db)
+    result = await service.investigate(request.finding_id)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.post("/execute-remediation")
+async def execute_remediation(request: ExecuteRemediationRequest, db: AsyncSession = Depends(get_db)):
+    """Step 4: Execute remediation action (status update, audit log)."""
+    service = CopilotService(db)
+    result = await service.execute_remediation(
+        finding_id=request.finding_id,
+        action=request.action,
+        params=request.params,
+    )
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.post("/verify")
+async def verify_fix(request: VerifyRequest, db: AsyncSession = Depends(get_db)):
+    """Step 5: Verify fix by running a pentest action and checking results."""
+    service = CopilotService(db)
+    result = await service.verify_fix(
+        finding_id=request.finding_id,
+        action_id=request.action_id,
+        target=request.target,
+    )
+    if result.get("status") == "error":
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result

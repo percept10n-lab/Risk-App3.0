@@ -1,0 +1,37 @@
+# Default Baseline Configuration
+defaults:
+  expected_open_ports:
+    router:
+      - 53    # DNS
+      - 80    # HTTP admin
+      - 443   # HTTPS admin
+    nas:
+      - 443   # HTTPS
+      - 445   # SMB
+      - 5001  # Synology
+    workstation:
+      - []    # No expected open ports
+    iot:
+      - []    # No expected open ports
+
+  expected_services:
+    router:
+      - dns
+      - http
+      - dhcp
+    nas:
+      - smb
+      - https
+    workstation: []
+
+  compliance_checks:
+    - name: "No default credentials"
+      applies_to: [router, nas, iot]
+    - name: "Firmware up to date"
+      applies_to: [router, nas, iot]
+    - name: "UPnP disabled"
+      applies_to: [router]
+    - name: "Remote management disabled"
+      applies_to: [router, nas]
+    - name: "Guest network isolated"
+      applies_to: [router]
