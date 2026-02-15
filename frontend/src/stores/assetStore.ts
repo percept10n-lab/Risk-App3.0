@@ -18,6 +18,7 @@ interface AssetState {
   }
   fetchAssets: () => Promise<void>
   fetchAsset: (id: string) => Promise<void>
+  deleteAsset: (id: string) => Promise<any>
   setFilters: (filters: Partial<AssetState['filters']>) => void
   setPage: (page: number) => void
 }
@@ -56,6 +57,15 @@ export const useAssetStore = create<AssetState>((set, get) => ({
     } catch (err: any) {
       set({ error: err.message, loading: false })
     }
+  },
+
+  deleteAsset: async (id: string) => {
+    const response = await assetsApi.delete(id)
+    set((state) => ({
+      assets: state.assets.filter((a) => a.id !== id),
+      total: state.total - 1,
+    }))
+    return response.data
   },
 
   setFilters: (filters) => {

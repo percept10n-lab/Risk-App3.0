@@ -151,6 +151,58 @@ class VulnScanService:
                     raw_findings.extend(findings)
                 except Exception as e:
                     logger.debug("DNS check failed", target=target, error=str(e))
+
+            # SNMP check
+            if 161 in open_ports:
+                try:
+                    findings = await asyncio.wait_for(
+                        self._run_snmp_check(target, 161), timeout=10
+                    )
+                    raw_findings.extend(findings)
+                except Exception as e:
+                    logger.debug("SNMP check failed", target=target, error=str(e))
+
+            # SMB check
+            if 445 in open_ports:
+                try:
+                    findings = await asyncio.wait_for(
+                        self._run_smb_check(target, 445), timeout=10
+                    )
+                    raw_findings.extend(findings)
+                except Exception as e:
+                    logger.debug("SMB check failed", target=target, error=str(e))
+
+            # Default credentials check (on HTTP ports)
+            for port in http_ports[:2]:  # Check first 2 HTTP ports max
+                try:
+                    device_type = asset.asset_type or "generic"
+                    findings = await asyncio.wait_for(
+                        self._run_default_creds_check(target, port, device_type), timeout=10
+                    )
+                    raw_findings.extend(findings)
+                except Exception as e:
+                    logger.debug("Default creds check failed", target=target, port=port, error=str(e))
+
+            # mDNS/LLMNR check
+            if 5353 in open_ports:
+                try:
+                    findings = await asyncio.wait_for(
+                        self._run_mdns_llmnr_check(target), timeout=10
+                    )
+                    raw_findings.extend(findings)
+                except Exception as e:
+                    logger.debug("mDNS/LLMNR check failed", target=target, error=str(e))
+
+            # MQTT check
+            mqtt_ports = [p for p in open_ports if p in (1883, 8883)]
+            for port in mqtt_ports:
+                try:
+                    findings = await asyncio.wait_for(
+                        self._run_mqtt_check(target, port), timeout=10
+                    )
+                    raw_findings.extend(findings)
+                except Exception as e:
+                    logger.debug("MQTT check failed", target=target, port=port, error=str(e))
         else:
             # Network not reachable - generate simulated findings from exposure profile
             logger.info("Target not reachable, generating simulated findings", target=target)
@@ -205,8 +257,12 @@ class VulnScanService:
             ports.append(445)
         if exposure.get("upnp"):
             ports.extend([1900, 5000])
-        # Always try common ports
-        ports.extend([80, 443, 22])
+        if exposure.get("snmp_exposed"):
+            ports.append(161)
+        if exposure.get("mqtt_exposed"):
+            ports.extend([1883, 8883])
+        # Always try common ports + new protocol ports
+        ports.extend([80, 443, 22, 161, 445, 5353, 1883])
         return list(set(ports))
 
     async def _run_http_check(self, target: str, port: int, use_tls: bool) -> list[dict]:
@@ -243,6 +299,51 @@ class VulnScanService:
         for f in findings:
             f["source_tool"] = "dns_check"
             f["source_check"] = "dns_check"
+        return findings
+
+    async def _run_snmp_check(self, target: str, port: int) -> list[dict]:
+        from mcp_servers.vuln_scanning.checks.snmp_checks import SNMPChecker
+        checker = SNMPChecker()
+        findings = await checker.check(target, port)
+        for f in findings:
+            f["source_tool"] = "snmp_check"
+            f["source_check"] = "snmp_check"
+        return findings
+
+    async def _run_smb_check(self, target: str, port: int) -> list[dict]:
+        from mcp_servers.vuln_scanning.checks.smb_checks import SMBChecker
+        checker = SMBChecker()
+        findings = await checker.check(target, port)
+        for f in findings:
+            f["source_tool"] = "smb_check"
+            f["source_check"] = "smb_check"
+        return findings
+
+    async def _run_default_creds_check(self, target: str, port: int, device_type: str = "generic") -> list[dict]:
+        from mcp_servers.vuln_scanning.checks.default_creds_check import DefaultCredsChecker
+        checker = DefaultCredsChecker()
+        findings = await checker.check(target, port, device_type=device_type)
+        for f in findings:
+            f["source_tool"] = "default_creds_check"
+            f["source_check"] = "default_creds_check"
+        return findings
+
+    async def _run_mdns_llmnr_check(self, target: str) -> list[dict]:
+        from mcp_servers.vuln_scanning.checks.mdns_llmnr_checks import MDNSLLMNRChecker
+        checker = MDNSLLMNRChecker()
+        findings = await checker.check(target)
+        for f in findings:
+            f["source_tool"] = "mdns_check"
+            f["source_check"] = "mdns_check"
+        return findings
+
+    async def _run_mqtt_check(self, target: str, port: int) -> list[dict]:
+        from mcp_servers.vuln_scanning.checks.mqtt_checks import MQTTChecker
+        checker = MQTTChecker()
+        findings = await checker.check(target, port)
+        for f in findings:
+            f["source_tool"] = "mqtt_check"
+            f["source_check"] = "mqtt_check"
         return findings
 
     async def _check_reachable(self, target: str) -> bool:

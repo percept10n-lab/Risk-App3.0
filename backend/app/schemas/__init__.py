@@ -6,3 +6,4 @@ from app.schemas.mitre import MitreMappingCreate, MitreMappingResponse, MitreOve
 from app.schemas.run import RunCreate, RunResponse
 from app.schemas.policy import PolicyCreate, PolicyUpdate, PolicyResponse
 from app.schemas.common import PaginatedResponse, OverrideRequest
+from app.schemas.schedule import ScanScheduleCreate, ScanScheduleUpdate, ScanScheduleResponse

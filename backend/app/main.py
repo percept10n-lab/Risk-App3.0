@@ -10,8 +10,9 @@ from app.api import (
     assets, findings, threats, risks, mitre,
     runs, pentest, vulnmgmt, reports, copilot,
     drift, settings as settings_api, ws,
-    discovery, audit, artifacts, nmap
+    discovery, audit, artifacts, nmap, schedules
 )
+from app.services.scheduler_service import SchedulerService
 
 structlog.configure(
     processors=[
@@ -27,7 +28,21 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application", version=settings.app_version)
     await init_db()
     os.makedirs(settings.artifacts_dir, exist_ok=True)
+
+    # Start scheduler
+    scheduler = SchedulerService()
+    try:
+        await scheduler.start()
+        app.state.scheduler = scheduler
+    except Exception as e:
+        logger.error("Failed to start scheduler", error=str(e))
+        app.state.scheduler = None
+
     yield
+
+    # Stop scheduler
+    if getattr(app.state, "scheduler", None):
+        await app.state.scheduler.stop()
     logger.info("Shutting down application")
 
 
@@ -63,6 +78,7 @@ app.include_router(discovery.router, prefix="/api/scan", tags=["scanning"])
 app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
 app.include_router(artifacts.router, prefix="/api/artifacts", tags=["artifacts"])
 app.include_router(nmap.router, prefix="/api/nmap", tags=["nmap"])
+app.include_router(schedules.router, prefix="/api/schedules", tags=["schedules"])
 
 
 @app.get("/api/health")

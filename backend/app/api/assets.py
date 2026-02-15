@@ -2,10 +2,15 @@ import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func as sa_func
+from sqlalchemy import select, func as sa_func, delete as sa_delete
 
 from app.database import get_db
 from app.models.asset import Asset
+from app.models.finding import Finding
+from app.models.threat import Threat
+from app.models.risk import Risk
+from app.models.mitre_mapping import MitreMapping
+from app.models.vulnerability import Vulnerability
 from app.models.override import Override
 from app.models.audit_event import AuditEvent
 from app.schemas.asset import AssetCreate, AssetUpdate, AssetResponse, AssetOverride
@@ -137,13 +142,119 @@ async def update_asset(asset_id: str, asset_in: AssetUpdate, db: AsyncSession = 
     return asset
 
 
-@router.delete("/{asset_id}", status_code=204)
-async def delete_asset(asset_id: str, db: AsyncSession = Depends(get_db)):
+@router.get("/{asset_id}/delete-preview")
+async def delete_preview(asset_id: str, db: AsyncSession = Depends(get_db)):
+    """Preview counts of linked records that would be deleted with this asset."""
     result = await db.execute(select(Asset).where(Asset.id == asset_id))
     asset = result.scalar_one_or_none()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
+
+    finding_ids_q = select(Finding.id).where(Finding.asset_id == asset_id)
+    threat_ids_q = select(Threat.id).where(Threat.asset_id == asset_id)
+
+    findings_count = (await db.execute(select(sa_func.count()).select_from(Finding).where(Finding.asset_id == asset_id))).scalar() or 0
+    threats_count = (await db.execute(select(sa_func.count()).select_from(Threat).where(Threat.asset_id == asset_id))).scalar() or 0
+    risks_count = (await db.execute(select(sa_func.count()).select_from(Risk).where(Risk.asset_id == asset_id))).scalar() or 0
+    mitre_count = (await db.execute(
+        select(sa_func.count()).select_from(MitreMapping).where(
+            MitreMapping.finding_id.in_(finding_ids_q) | MitreMapping.threat_id.in_(threat_ids_q)
+        )
+    )).scalar() or 0
+    vulns_count = (await db.execute(
+        select(sa_func.count()).select_from(Vulnerability).where(Vulnerability.finding_id.in_(finding_ids_q))
+    )).scalar() or 0
+
+    return {
+        "findings": findings_count,
+        "threats": threats_count,
+        "risks": risks_count,
+        "mitre_mappings": mitre_count,
+        "vulnerabilities": vulns_count,
+    }
+
+
+@router.delete("/{asset_id}")
+async def delete_asset(asset_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete asset with cascade deletion of all linked records."""
+    result = await db.execute(select(Asset).where(Asset.id == asset_id))
+    asset = result.scalar_one_or_none()
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    # Collect IDs for cascade
+    finding_ids_result = await db.execute(select(Finding.id).where(Finding.asset_id == asset_id))
+    finding_ids = [r[0] for r in finding_ids_result.fetchall()]
+
+    threat_ids_result = await db.execute(select(Threat.id).where(Threat.asset_id == asset_id))
+    threat_ids = [r[0] for r in threat_ids_result.fetchall()]
+
+    # 1. Delete MITRE mappings linked to asset's findings or threats
+    mitre_deleted = 0
+    if finding_ids or threat_ids:
+        conditions = []
+        if finding_ids:
+            conditions.append(MitreMapping.finding_id.in_(finding_ids))
+        if threat_ids:
+            conditions.append(MitreMapping.threat_id.in_(threat_ids))
+        from sqlalchemy import or_
+        mitre_result = await db.execute(sa_delete(MitreMapping).where(or_(*conditions)))
+        mitre_deleted = mitre_result.rowcount
+
+    # 2. Delete vulnerabilities linked to asset's findings
+    vulns_deleted = 0
+    if finding_ids:
+        vulns_result = await db.execute(sa_delete(Vulnerability).where(Vulnerability.finding_id.in_(finding_ids)))
+        vulns_deleted = vulns_result.rowcount
+
+    # 3. Delete risks
+    risks_result = await db.execute(sa_delete(Risk).where(Risk.asset_id == asset_id))
+    risks_deleted = risks_result.rowcount
+
+    # 4. Delete findings
+    findings_result = await db.execute(sa_delete(Finding).where(Finding.asset_id == asset_id))
+    findings_deleted = findings_result.rowcount
+
+    # 5. Delete threats
+    threats_result = await db.execute(sa_delete(Threat).where(Threat.asset_id == asset_id))
+    threats_deleted = threats_result.rowcount
+
+    # 6. Delete asset
     await db.delete(asset)
+
+    # Audit trail
+    audit = AuditEvent(
+        event_type="delete",
+        entity_type="asset",
+        entity_id=asset_id,
+        actor="user",
+        action="cascade_delete",
+        old_value={
+            "ip_address": asset.ip_address,
+            "hostname": asset.hostname,
+            "asset_type": asset.asset_type,
+        },
+        new_value={
+            "findings_deleted": findings_deleted,
+            "threats_deleted": threats_deleted,
+            "risks_deleted": risks_deleted,
+            "mitre_mappings_deleted": mitre_deleted,
+            "vulnerabilities_deleted": vulns_deleted,
+        },
+    )
+    db.add(audit)
+
+    return {
+        "status": "deleted",
+        "asset_id": asset_id,
+        "deleted_counts": {
+            "findings": findings_deleted,
+            "threats": threats_deleted,
+            "risks": risks_deleted,
+            "mitre_mappings": mitre_deleted,
+            "vulnerabilities": vulns_deleted,
+        },
+    }
 
 
 @router.post("/{asset_id}/override", status_code=201)

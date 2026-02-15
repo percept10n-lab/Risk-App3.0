@@ -8,57 +8,11 @@ import { useAssetStore } from '../../stores/assetStore'
 import { assetsApi, discoveryApi, threatsApi, vulnScanApi } from '../../api/endpoints'
 import { formatRelativeTime } from '../../utils/format'
 import type { Asset } from '../../types'
-import { Loader2, Radar, Zap, Search, CheckCircle } from 'lucide-react'
-
-const columns = [
-  {
-    key: 'ip_address',
-    header: 'IP Address',
-    render: (asset: Asset) => (
-      <span className="font-mono text-sm">{asset.ip_address}</span>
-    ),
-  },
-  {
-    key: 'hostname',
-    header: 'Hostname',
-    render: (asset: Asset) => asset.hostname || '-',
-  },
-  {
-    key: 'asset_type',
-    header: 'Type',
-    render: (asset: Asset) => (
-      <span className="capitalize">{asset.asset_type}</span>
-    ),
-  },
-  {
-    key: 'zone',
-    header: 'Zone',
-    render: (asset: Asset) => (
-      <Badge variant="info">{asset.zone.toUpperCase()}</Badge>
-    ),
-  },
-  {
-    key: 'criticality',
-    header: 'Criticality',
-    render: (asset: Asset) => (
-      <Badge variant={asset.criticality as any}>{asset.criticality}</Badge>
-    ),
-  },
-  {
-    key: 'vendor',
-    header: 'Vendor',
-    render: (asset: Asset) => asset.vendor || '-',
-  },
-  {
-    key: 'last_seen',
-    header: 'Last Seen',
-    render: (asset: Asset) => formatRelativeTime(asset.last_seen),
-  },
-]
+import { Loader2, Radar, Zap, Search, CheckCircle, RefreshCw, Trash2, AlertTriangle } from 'lucide-react'
 
 export default function AssetsPage() {
   const navigate = useNavigate()
-  const { assets, total, page, pageSize, loading, filters, fetchAssets, setFilters, setPage } = useAssetStore()
+  const { assets, total, page, pageSize, loading, filters, fetchAssets, setFilters, setPage, deleteAsset } = useAssetStore()
 
   // Discovery modal state
   const [discoveryOpen, setDiscoveryOpen] = useState(false)
@@ -71,6 +25,19 @@ export default function AssetsPage() {
   const [threatResult, setThreatResult] = useState<any>(null)
   const [vulnLoading, setVulnLoading] = useState(false)
   const [vulnResult, setVulnResult] = useState<any>(null)
+
+  // Refresh modal state
+  const [refreshOpen, setRefreshOpen] = useState(false)
+  const [refreshCidr, setRefreshCidr] = useState('')
+  const [refreshGatewayLoading, setRefreshGatewayLoading] = useState(false)
+  const [refreshLoading, setRefreshLoading] = useState(false)
+  const [refreshResult, setRefreshResult] = useState<any>(null)
+
+  // Delete modal state
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteTargetAsset, setDeleteTargetAsset] = useState<Asset | null>(null)
+  const [deletePreview, setDeletePreview] = useState<any>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     fetchAssets()
@@ -131,6 +98,118 @@ export default function AssetsPage() {
     setVulnLoading(false)
   }
 
+  // Refresh Assets
+  const openRefreshModal = async () => {
+    setRefreshOpen(true)
+    setRefreshResult(null)
+    setRefreshCidr('')
+    setRefreshGatewayLoading(true)
+    try {
+      const res = await assetsApi.detectGateway()
+      const data = res.data as any
+      if (data.cidr) setRefreshCidr(data.cidr)
+    } catch { /* empty */ }
+    setRefreshGatewayLoading(false)
+  }
+
+  const startRefresh = async () => {
+    if (!refreshCidr) return
+    setRefreshLoading(true)
+    setRefreshResult(null)
+    try {
+      const res = await discoveryApi.discover({ subnet: refreshCidr })
+      setRefreshResult(res.data)
+      fetchAssets()
+    } catch (err: any) {
+      setRefreshResult({ status: 'error', error: err.message })
+    }
+    setRefreshLoading(false)
+  }
+
+  // Row-level delete
+  const openRowDelete = async (asset: Asset, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDeleteTargetAsset(asset)
+    setDeleteModalOpen(true)
+    setDeletePreview(null)
+    try {
+      const res = await assetsApi.deletePreview(asset.id)
+      setDeletePreview(res.data)
+    } catch {
+      setDeletePreview({ findings: '?', threats: '?', risks: '?', mitre_mappings: '?', vulnerabilities: '?' })
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTargetAsset) return
+    setDeleteLoading(true)
+    try {
+      await deleteAsset(deleteTargetAsset.id)
+      setDeleteModalOpen(false)
+      setDeleteTargetAsset(null)
+    } catch { /* empty */ }
+    setDeleteLoading(false)
+  }
+
+  const columns = [
+    {
+      key: 'ip_address',
+      header: 'IP Address',
+      render: (asset: Asset) => (
+        <span className="font-mono text-sm">{asset.ip_address}</span>
+      ),
+    },
+    {
+      key: 'hostname',
+      header: 'Hostname',
+      render: (asset: Asset) => asset.hostname || '-',
+    },
+    {
+      key: 'asset_type',
+      header: 'Type',
+      render: (asset: Asset) => (
+        <span className="capitalize">{asset.asset_type}</span>
+      ),
+    },
+    {
+      key: 'zone',
+      header: 'Zone',
+      render: (asset: Asset) => (
+        <Badge variant="info">{asset.zone.toUpperCase()}</Badge>
+      ),
+    },
+    {
+      key: 'criticality',
+      header: 'Criticality',
+      render: (asset: Asset) => (
+        <Badge variant={asset.criticality as any}>{asset.criticality}</Badge>
+      ),
+    },
+    {
+      key: 'vendor',
+      header: 'Vendor',
+      render: (asset: Asset) => asset.vendor || '-',
+    },
+    {
+      key: 'last_seen',
+      header: 'Last Seen',
+      render: (asset: Asset) => formatRelativeTime(asset.last_seen),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (asset: Asset) => (
+        <button
+          onClick={(e) => openRowDelete(asset, e)}
+          className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50 transition-colors"
+          title="Delete asset"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      ),
+    },
+  ]
+
   return (
     <div>
       <PageHeader
@@ -138,6 +217,13 @@ export default function AssetsPage() {
         description="Network asset inventory"
         actions={
           <div className="flex gap-2">
+            <button
+              onClick={openRefreshModal}
+              className="btn-secondary text-sm flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh Assets
+            </button>
             <button
               onClick={openDiscoveryModal}
               className="btn-primary text-sm flex items-center gap-2"
@@ -311,6 +397,135 @@ export default function AssetsPage() {
             <div className="flex justify-end mt-6">
               <button onClick={() => setDiscoveryOpen(false)} className="btn-secondary text-sm">
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refresh Modal */}
+      {refreshOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+            <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-brand-600" />
+              Refresh Assets
+            </h3>
+
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+              This will re-scan the network and update existing assets with current information.
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-700 mb-1">Target CIDR</label>
+              <div className="flex gap-2">
+                <input
+                  value={refreshCidr}
+                  onChange={(e) => setRefreshCidr(e.target.value)}
+                  className="flex-1 px-3 py-2 border rounded-lg text-sm font-mono"
+                  placeholder="e.g., 192.168.1.0/24"
+                  disabled={refreshLoading}
+                />
+                {refreshGatewayLoading && <Loader2 className="w-5 h-5 animate-spin text-gray-400 self-center" />}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Auto-detected from default gateway. Edit if needed.</p>
+            </div>
+
+            {!refreshResult && (
+              <button
+                onClick={startRefresh}
+                disabled={refreshLoading || !refreshCidr}
+                className="btn-primary text-sm w-full flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {refreshLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                {refreshLoading ? 'Scanning...' : 'Start Refresh'}
+              </button>
+            )}
+
+            {refreshResult && (
+              <div className="mt-4">
+                {refreshResult.status === 'error' ? (
+                  <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                    <p className="text-sm text-red-700 font-medium">Refresh failed</p>
+                    <p className="text-xs text-red-600 mt-1">{refreshResult.error}</p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <p className="text-sm text-green-700 font-medium mb-3">Refresh Complete</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-green-700">{refreshResult.hosts_discovered ?? refreshResult.total_hosts ?? 0}</p>
+                        <p className="text-xs text-green-600">Hosts Found</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-blue-700">{refreshResult.assets_created ?? 0}</p>
+                        <p className="text-xs text-blue-600">New Assets</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-700">{refreshResult.assets_updated ?? 0}</p>
+                        <p className="text-xs text-gray-600">Updated</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end mt-6">
+              <button onClick={() => setRefreshOpen(false)} className="btn-secondary text-sm">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteModalOpen && deleteTargetAsset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-red-600" />
+              </div>
+              <h3 className="font-semibold text-lg">Delete Asset</h3>
+            </div>
+
+            <p className="text-sm text-gray-600 mb-4">
+              This will permanently delete <strong>{deleteTargetAsset.hostname || deleteTargetAsset.ip_address}</strong> and all linked records:
+            </p>
+
+            {deletePreview ? (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 space-y-1">
+                <p className="text-sm text-red-700"><strong>{deletePreview.findings}</strong> findings</p>
+                <p className="text-sm text-red-700"><strong>{deletePreview.threats}</strong> threats</p>
+                <p className="text-sm text-red-700"><strong>{deletePreview.risks}</strong> risks</p>
+                <p className="text-sm text-red-700"><strong>{deletePreview.mitre_mappings}</strong> MITRE mappings</p>
+                <p className="text-sm text-red-700"><strong>{deletePreview.vulnerabilities}</strong> vulnerabilities</p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-4 text-sm text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin" /> Loading linked records...
+              </div>
+            )}
+
+            <p className="text-xs text-red-500 mb-4">This action cannot be undone.</p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => { setDeleteModalOpen(false); setDeleteTargetAsset(null) }}
+                disabled={deleteLoading}
+                className="btn-secondary text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleteLoading || !deletePreview}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {deleteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Delete Everything
               </button>
             </div>
           </div>

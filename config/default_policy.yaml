@@ -23,6 +23,11 @@ actions:
     - ssdp_discovery
     - upnp_check
     - admin_exposure_check
+    - snmp_check
+    - smb_check
+    - default_creds_check
+    - mdns_check
+    - mqtt_check
 
 rate_limits:
   scan: "100/min"

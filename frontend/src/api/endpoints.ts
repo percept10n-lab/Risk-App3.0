@@ -1,5 +1,5 @@
 import api from './client'
-import type { PaginatedResponse, Asset, Finding, Threat, Risk, MitreMapping, Run } from '../types'
+import type { PaginatedResponse, Asset, Finding, Threat, Risk, MitreMapping, Run, ScanSchedule } from '../types'
 
 // Assets
 export const assetsApi = {
@@ -8,9 +8,11 @@ export const assetsApi = {
   create: (data: Partial<Asset>) => api.post<Asset>('/assets', data),
   update: (id: string, data: Partial<Asset>) => api.put<Asset>(`/assets/${id}`, data),
   delete: (id: string) => api.delete(`/assets/${id}`),
+  deletePreview: (id: string) => api.get(`/assets/${id}/delete-preview`),
   override: (id: string, data: { field: string; value: any; rationale: string }) =>
     api.post(`/assets/${id}/override`, data),
   detectGateway: () => api.get('/assets/detect-gateway'),
+  fingerprint: (data: { asset_id: string }) => api.post('/scan/fingerprint', data),
 }
 
 // Discovery
@@ -142,4 +144,15 @@ export const nmapApi = {
     api.post('/nmap/verify', data),
   assessRisk: (data: { asset_id: string; finding_ids?: string[]; run_id?: string }) =>
     api.post('/nmap/assess-risk', data),
+}
+
+// Schedules
+export const schedulesApi = {
+  list: () => api.get<ScanSchedule[]>('/schedules'),
+  get: (id: string) => api.get<ScanSchedule>(`/schedules/${id}`),
+  create: (data: Partial<ScanSchedule>) => api.post<ScanSchedule>('/schedules', data),
+  update: (id: string, data: Partial<ScanSchedule>) => api.put<ScanSchedule>(`/schedules/${id}`, data),
+  delete: (id: string) => api.delete(`/schedules/${id}`),
+  toggle: (id: string) => api.post(`/schedules/${id}/toggle`),
+  runNow: (id: string) => api.post(`/schedules/${id}/run-now`),
 }

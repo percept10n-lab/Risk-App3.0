@@ -17,3 +17,4 @@ scapy>=2.6.0
 paramiko>=3.5.0
 zeroconf>=0.133.0
 mcp>=1.1.0
+apscheduler>=3.10.0

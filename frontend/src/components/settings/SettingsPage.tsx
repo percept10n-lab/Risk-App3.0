@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react'
 import PageHeader from '../common/PageHeader'
-import { Settings, Shield, Bot, Gauge, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
-import { settingsApi } from '../../api/endpoints'
+import { Settings, Shield, Bot, Gauge, CheckCircle2, XCircle, Loader2, Clock, Plus, Play, Trash2 } from 'lucide-react'
+import { settingsApi, schedulesApi } from '../../api/endpoints'
+import { formatDate } from '../../utils/format'
+import type { ScanSchedule } from '../../types'
 
-const TABS = ['policy', 'ai', 'thresholds'] as const
+const TABS = ['policy', 'ai', 'thresholds', 'schedules'] as const
 type Tab = typeof TABS[number]
 const TAB_LABELS: Record<Tab, { label: string; icon: any }> = {
   policy: { label: 'Scan Policy', icon: Shield },
   ai: { label: 'AI Configuration', icon: Bot },
   thresholds: { label: 'Evaluation Thresholds', icon: Gauge },
+  schedules: { label: 'Schedules', icon: Clock },
 }
 
 interface EvalThresholds {
@@ -35,6 +38,30 @@ function loadThresholds(): EvalThresholds {
     return DEFAULT_THRESHOLDS
   }
 }
+
+const INTERVAL_OPTIONS = [
+  { value: 1, label: 'Every 1 hour' },
+  { value: 2, label: 'Every 2 hours' },
+  { value: 4, label: 'Every 4 hours' },
+  { value: 6, label: 'Every 6 hours' },
+  { value: 12, label: 'Every 12 hours' },
+  { value: 24, label: 'Every 24 hours' },
+  { value: 48, label: 'Every 48 hours' },
+  { value: 168, label: 'Every 7 days' },
+]
+
+const CRON_PRESETS = [
+  { value: '0 2 * * *', label: 'Daily at 2:00 AM' },
+  { value: '0 3 * * 0', label: 'Weekly Sunday 3:00 AM' },
+  { value: '0 4 1 * *', label: 'Monthly 1st at 4:00 AM' },
+]
+
+const SCAN_TYPES = [
+  { value: 'full', label: 'Full Scan' },
+  { value: 'discovery', label: 'Discovery Only' },
+  { value: 'vuln_only', label: 'Vulnerability Scan Only' },
+  { value: 'threat_only', label: 'Threat Modeling Only' },
+]
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('policy')
@@ -65,6 +92,21 @@ export default function SettingsPage() {
   // Thresholds state
   const [thresholds, setThresholds] = useState<EvalThresholds>(loadThresholds)
 
+  // Schedules state
+  const [schedules, setSchedules] = useState<ScanSchedule[]>([])
+  const [schedulesLoading, setSchedulesLoading] = useState(false)
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
+  const [editingSchedule, setEditingSchedule] = useState<ScanSchedule | null>(null)
+  const [scheduleForm, setScheduleForm] = useState({
+    name: '',
+    schedule_type: 'interval' as 'interval' | 'cron',
+    interval_hours: 24,
+    cron_expression: '0 2 * * *',
+    scan_type: 'full',
+    scope: { subnets: ['192.168.1.0/24'] },
+    enabled: true,
+  })
+
   useEffect(() => {
     settingsApi.getAiConfig().then((res) => setAiConfig(res.data)).catch(() => {})
     settingsApi.getPolicy().then((res) => {
@@ -81,6 +123,19 @@ export default function SettingsPage() {
       }
     }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (tab === 'schedules') fetchSchedules()
+  }, [tab])
+
+  async function fetchSchedules() {
+    setSchedulesLoading(true)
+    try {
+      const res = await schedulesApi.list()
+      setSchedules(res.data)
+    } catch { /* empty */ }
+    setSchedulesLoading(false)
+  }
 
   function flash(msg: string) {
     setSaveMsg(msg)
@@ -143,6 +198,83 @@ export default function SettingsPage() {
     if (action && !policy.action_allowlist.includes(action)) {
       setPolicy((p) => ({ ...p, action_allowlist: [...p.action_allowlist, action] }))
     }
+  }
+
+  // Schedule handlers
+  function openCreateSchedule() {
+    setEditingSchedule(null)
+    setScheduleForm({
+      name: '',
+      schedule_type: 'interval',
+      interval_hours: 24,
+      cron_expression: '0 2 * * *',
+      scan_type: 'full',
+      scope: { subnets: [policy.scope_allowlist[0] || '192.168.1.0/24'] },
+      enabled: true,
+    })
+    setScheduleModalOpen(true)
+  }
+
+  function openEditSchedule(s: ScanSchedule) {
+    setEditingSchedule(s)
+    const scopeData = (s.scope && (s.scope as any).subnets) ? s.scope as { subnets: string[] } : { subnets: ['192.168.1.0/24'] }
+    setScheduleForm({
+      name: s.name,
+      schedule_type: s.schedule_type,
+      interval_hours: s.interval_hours || 24,
+      cron_expression: s.cron_expression || '0 2 * * *',
+      scan_type: s.scan_type,
+      scope: scopeData,
+      enabled: s.enabled,
+    })
+    setScheduleModalOpen(true)
+  }
+
+  async function handleSaveSchedule() {
+    setSaving(true)
+    try {
+      const data: Partial<ScanSchedule> = {
+        name: scheduleForm.name,
+        schedule_type: scheduleForm.schedule_type,
+        interval_hours: scheduleForm.schedule_type === 'interval' ? scheduleForm.interval_hours : null,
+        cron_expression: scheduleForm.schedule_type === 'cron' ? scheduleForm.cron_expression : null,
+        scan_type: scheduleForm.scan_type as ScanSchedule['scan_type'],
+        scope: scheduleForm.scope,
+        enabled: scheduleForm.enabled,
+      }
+      if (editingSchedule) {
+        await schedulesApi.update(editingSchedule.id, data)
+      } else {
+        await schedulesApi.create(data)
+      }
+      setScheduleModalOpen(false)
+      fetchSchedules()
+      flash(editingSchedule ? 'Schedule updated' : 'Schedule created')
+    } catch { flash('Failed to save schedule') }
+    setSaving(false)
+  }
+
+  async function handleToggleSchedule(id: string) {
+    try {
+      await schedulesApi.toggle(id)
+      fetchSchedules()
+    } catch { flash('Failed to toggle schedule') }
+  }
+
+  async function handleDeleteSchedule(id: string) {
+    try {
+      await schedulesApi.delete(id)
+      fetchSchedules()
+      flash('Schedule deleted')
+    } catch { flash('Failed to delete schedule') }
+  }
+
+  async function handleRunNow(id: string) {
+    try {
+      await schedulesApi.runNow(id)
+      flash('Scan triggered')
+      setTimeout(fetchSchedules, 2000)
+    } catch { flash('Failed to trigger scan') }
   }
 
   return (
@@ -455,6 +587,218 @@ export default function SettingsPage() {
           <button onClick={handleSaveThresholds} className="btn-primary">
             Save Thresholds
           </button>
+        </div>
+      )}
+
+      {/* Tab 4: Schedules */}
+      {tab === 'schedules' && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-gray-500">Configure automatic recurring scans</p>
+            <button onClick={openCreateSchedule} className="btn-primary text-sm flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              New Schedule
+            </button>
+          </div>
+
+          {schedulesLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            </div>
+          ) : schedules.length === 0 ? (
+            <div className="card p-12 text-center text-gray-500">
+              <Clock className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+              <p className="text-sm">No schedules configured yet.</p>
+              <p className="text-xs text-gray-400 mt-1">Create a schedule to automate recurring scans.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {schedules.map((s) => (
+                <div key={s.id} className="card p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleToggleSchedule(s.id)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          s.enabled ? 'bg-brand-600' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            s.enabled ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                      <div>
+                        <button onClick={() => openEditSchedule(s)} className="font-medium text-sm hover:text-brand-600">
+                          {s.name}
+                        </button>
+                        <div className="flex gap-3 text-xs text-gray-500 mt-0.5">
+                          <span className="capitalize">{SCAN_TYPES.find((t) => t.value === s.scan_type)?.label || s.scan_type}</span>
+                          <span>
+                            {s.schedule_type === 'interval'
+                              ? `Every ${s.interval_hours}h`
+                              : s.cron_expression}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right text-xs text-gray-500">
+                        {s.next_run_at && (
+                          <p>Next: {formatDate(s.next_run_at)}</p>
+                        )}
+                        {s.last_run_at && (
+                          <p>Last: {formatDate(s.last_run_at)}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => handleRunNow(s.id)}
+                          className="p-1.5 text-gray-400 hover:text-brand-600 rounded hover:bg-brand-50"
+                          title="Run now"
+                        >
+                          <Play className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSchedule(s.id)}
+                          className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Schedule Create/Edit Modal */}
+      {scheduleModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+            <h3 className="font-semibold text-lg mb-4">
+              {editingSchedule ? 'Edit Schedule' : 'New Schedule'}
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
+                <input
+                  value={scheduleForm.name}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                  placeholder="e.g., Nightly Full Scan"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Scan Type</label>
+                <select
+                  value={scheduleForm.scan_type}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, scan_type: e.target.value })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
+                >
+                  {SCAN_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-2">Schedule Type</label>
+                <div className="flex gap-4 mb-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={scheduleForm.schedule_type === 'interval'}
+                      onChange={() => setScheduleForm({ ...scheduleForm, schedule_type: 'interval' })}
+                      className="w-4 h-4 text-brand-600"
+                    />
+                    <span className="text-sm">Interval</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={scheduleForm.schedule_type === 'cron'}
+                      onChange={() => setScheduleForm({ ...scheduleForm, schedule_type: 'cron' })}
+                      className="w-4 h-4 text-brand-600"
+                    />
+                    <span className="text-sm">Cron</span>
+                  </label>
+                </div>
+
+                {scheduleForm.schedule_type === 'interval' ? (
+                  <select
+                    value={scheduleForm.interval_hours}
+                    onChange={(e) => setScheduleForm({ ...scheduleForm, interval_hours: Number(e.target.value) })}
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                  >
+                    {INTERVAL_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="space-y-2">
+                    <input
+                      value={scheduleForm.cron_expression}
+                      onChange={(e) => setScheduleForm({ ...scheduleForm, cron_expression: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                      placeholder="0 2 * * *"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {CRON_PRESETS.map((p) => (
+                        <button
+                          key={p.value}
+                          onClick={() => setScheduleForm({ ...scheduleForm, cron_expression: p.value })}
+                          className="text-xs px-2 py-1 bg-gray-100 rounded hover:bg-gray-200"
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">CIDR Scope</label>
+                <input
+                  value={(scheduleForm.scope?.subnets || [''])[0]}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, scope: { subnets: [e.target.value] } })}
+                  className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                  placeholder="192.168.1.0/24"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scheduleForm.enabled}
+                  onChange={(e) => setScheduleForm({ ...scheduleForm, enabled: e.target.checked })}
+                  className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                />
+                <span className="text-sm text-gray-700">Enable immediately</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setScheduleModalOpen(false)} className="btn-secondary text-sm">
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveSchedule}
+                disabled={saving || !scheduleForm.name}
+                className="btn-primary text-sm disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : editingSchedule ? 'Update' : 'Create'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

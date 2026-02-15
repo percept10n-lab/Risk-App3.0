@@ -10,9 +10,10 @@ from app.models.policy import Policy
 from app.models.override import Override
 from app.models.vulnerability import Vulnerability
 from app.models.baseline import Baseline
+from app.models.schedule import ScanSchedule
 
 __all__ = [
     "Asset", "Finding", "Threat", "Risk", "MitreMapping",
     "Artifact", "AuditEvent", "Run", "Policy", "Override",
-    "Vulnerability", "Baseline",
+    "Vulnerability", "Baseline", "ScanSchedule",
 ]

@@ -1,5 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import StaticPool
+from sqlalchemy import event
 from app.config import settings
 import os
 
@@ -10,6 +12,15 @@ engine = create_async_engine(
     echo=settings.debug,
     connect_args={"check_same_thread": False, "timeout": 30},
 )
+
+
+@event.listens_for(engine.sync_engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    """Enable WAL mode for better concurrency with SQLite."""
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.close()
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -35,7 +46,7 @@ async def init_db():
         from app.models import (
             asset, finding, threat, risk, mitre_mapping,
             artifact, audit_event, run, policy, override,
-            vulnerability, baseline
+            vulnerability, baseline, schedule
         )
         await conn.run_sync(Base.metadata.create_all)
 

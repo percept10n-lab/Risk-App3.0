@@ -143,6 +143,23 @@ export interface Policy {
   updated_at: string
 }
 
+// Scan Schedule
+export interface ScanSchedule {
+  id: string
+  name: string
+  schedule_type: 'interval' | 'cron'
+  interval_hours: number | null
+  cron_expression: string | null
+  scope: Record<string, any> | null
+  scan_type: 'full' | 'discovery' | 'vuln_only' | 'threat_only'
+  enabled: boolean
+  last_run_at: string | null
+  next_run_at: string | null
+  last_run_id: string | null
+  created_at: string
+  updated_at: string
+}
+
 // Audit Event
 export interface AuditEvent {
   id: string
