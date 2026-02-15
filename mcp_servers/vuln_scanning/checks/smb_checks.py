@@ -7,24 +7,24 @@ logger = structlog.get_logger()
 
 # SMB1 Negotiate request
 SMB1_NEGOTIATE = (
-    b"\x00"          # Session message
-    b"\x00\x00\x45"  # Length (placeholder, adjusted below)
-    b"\xff\x53\x4d\x42"  # SMB magic
-    b"\x72"          # Command: Negotiate
-    b"\x00\x00\x00\x00"  # Status
-    b"\x08"          # Flags
-    b"\x01\xc0"      # Flags2
-    b"\x00" * 12     # Padding
-    b"\x00\x00"      # Tree ID
-    b"\x00\x01"      # Process ID
-    b"\x00\x00"      # User ID
-    b"\x00\x00"      # Multiplex ID
-    b"\x00"          # Word count
-    b"\x12\x00"      # Byte count
-    b"\x02"          # Dialect buffer format
-    b"\x4e\x54\x20\x4c\x4d\x20\x30\x2e\x31\x32\x00"  # NT LM 0.12
-    b"\x02"
-    b"\x53\x4d\x42\x20\x32\x2e\x30\x30\x32\x00"  # SMB 2.002
+    b"\x00"
+    + b"\x00\x00\x45"
+    + b"\xff\x53\x4d\x42"  # SMB magic
+    + b"\x72"              # Command: Negotiate
+    + b"\x00\x00\x00\x00"  # Status
+    + b"\x08"              # Flags
+    + b"\x01\xc0"          # Flags2
+    + b"\x00" * 12         # Padding
+    + b"\x00\x00"          # Tree ID
+    + b"\x00\x01"          # Process ID
+    + b"\x00\x00"          # User ID
+    + b"\x00\x00"          # Multiplex ID
+    + b"\x00"              # Word count
+    + b"\x12\x00"          # Byte count
+    + b"\x02"              # Dialect buffer format
+    + b"\x4e\x54\x20\x4c\x4d\x20\x30\x2e\x31\x32\x00"  # NT LM 0.12
+    + b"\x02"
+    + b"\x53\x4d\x42\x20\x32\x2e\x30\x30\x32\x00"  # SMB 2.002
 )
 
 
@@ -175,30 +175,30 @@ class SMBChecker:
 
             # Build session setup with empty credentials
             session_setup = bytearray(
-                b"\x00\x00\x00\x4f"  # Length
-                b"\xff\x53\x4d\x42"  # SMB magic
-                b"\x73"              # Command: Session Setup
-                b"\x00\x00\x00\x00"  # Status
-                b"\x08"              # Flags
-                b"\x01\xc0"          # Flags2
-                b"\x00" * 12         # Padding
-                b"\x00\x00"          # Tree ID
-                b"\x00\x01"          # Process ID
-                b"\x00\x00"          # User ID
-                b"\x00\x01"          # Multiplex ID
-                b"\x0d"              # Word count: 13
-                b"\xff"              # AndX command: none
-                b"\x00"              # Reserved
-                b"\x00\x00"          # AndX offset
-                b"\x04\x11"          # Max buffer
-                b"\x01\x00"          # Max mpx
-                b"\x00\x00"          # VC number
-                b"\x00\x00\x00\x00"  # Session key
-                b"\x01\x00"          # Security blob length
-                b"\x00\x00"          # Reserved
-                b"\x00\x00\x00\x00"  # Capabilities
-                b"\x01\x00"          # Byte count
-                b"\x00"              # Security blob (null)
+                b"\x00\x00\x00\x4f"
+                + b"\xff\x53\x4d\x42"  # SMB magic
+                + b"\x73"              # Command: Session Setup
+                + b"\x00\x00\x00\x00"  # Status
+                + b"\x08"              # Flags
+                + b"\x01\xc0"          # Flags2
+                + b"\x00" * 12         # Padding
+                + b"\x00\x00"          # Tree ID
+                + b"\x00\x01"          # Process ID
+                + b"\x00\x00"          # User ID
+                + b"\x00\x01"          # Multiplex ID
+                + b"\x0d"              # Word count: 13
+                + b"\xff"              # AndX command: none
+                + b"\x00"              # Reserved
+                + b"\x00\x00"          # AndX offset
+                + b"\x04\x11"          # Max buffer
+                + b"\x01\x00"          # Max mpx
+                + b"\x00\x00"          # VC number
+                + b"\x00\x00\x00\x00"  # Session key
+                + b"\x01\x00"          # Security blob length
+                + b"\x00\x00"          # Reserved
+                + b"\x00\x00\x00\x00"  # Capabilities
+                + b"\x01\x00"          # Byte count
+                + b"\x00"              # Security blob (null)
             )
             sock.sendall(bytes(session_setup))
             response = sock.recv(4096)
