@@ -136,14 +136,10 @@ export const healthApi = {
 
 // Nmap Scanner
 export const nmapApi = {
-  listProfiles: () => api.get('/nmap/profiles'),
-  scan: (data: { asset_id?: string | null; target?: string | null; profile_id: string; run_id?: string; params?: Record<string, any> }) =>
+  scan: (data: { target: string; nmap_args?: string; timeout?: number; auto_pipeline?: boolean }) =>
     api.post('/nmap/scan', data),
   results: (params?: Record<string, any>) => api.get('/nmap/results', { params }),
-  verify: (data: { asset_id: string; finding_ids?: string[]; run_id?: string }) =>
-    api.post('/nmap/verify', data),
-  assessRisk: (data: { asset_id: string; finding_ids?: string[]; run_id?: string }) =>
-    api.post('/nmap/assess-risk', data),
+  status: (runId: string) => api.get(`/nmap/status/${runId}`),
 }
 
 // Schedules
