@@ -19,6 +19,8 @@ async def list_threats(
     page_size: int = Query(50, ge=1, le=200),
     asset_id: str | None = None,
     threat_type: str | None = None,
+    zone: str | None = None,
+    source: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Threat)
@@ -29,6 +31,12 @@ async def list_threats(
     if threat_type:
         query = query.where(Threat.threat_type == threat_type)
         count_query = count_query.where(Threat.threat_type == threat_type)
+    if zone:
+        query = query.where(Threat.zone == zone)
+        count_query = count_query.where(Threat.zone == zone)
+    if source:
+        query = query.where(Threat.source == source)
+        count_query = count_query.where(Threat.source == source)
     total = (await db.execute(count_query)).scalar() or 0
     result = await db.execute(query.offset((page - 1) * page_size).limit(page_size).order_by(Threat.created_at.desc()))
     return PaginatedResponse(items=result.scalars().all(), total=total, page=page, page_size=page_size)

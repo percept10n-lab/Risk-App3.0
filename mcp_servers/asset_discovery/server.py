@@ -20,7 +20,7 @@ passive = PassiveDiscovery()
         "properties": {
             "subnet": {
                 "type": "string",
-                "description": "Target subnet in CIDR notation (e.g., 192.168.1.0/24)",
+                "description": "Target subnet in CIDR notation (e.g., 192.168.178.0/24)",
             },
             "timeout": {
                 "type": "integer",

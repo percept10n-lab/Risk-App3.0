@@ -17,7 +17,7 @@ const STEPS = [
 
 export default function WorkflowPage() {
   const { runs, activeRun, loading, polling, error, fetchRuns, createRun, pauseRun, resumeRun, cancelRun, stopPolling } = useRunStore()
-  const [subnet, setSubnet] = useState('192.168.1.0/24')
+  const [subnet, setSubnet] = useState('192.168.178.0/24')
 
   useEffect(() => {
     fetchRuns()
@@ -49,7 +49,7 @@ export default function WorkflowPage() {
               type="text"
               value={subnet}
               onChange={(e) => setSubnet(e.target.value)}
-              placeholder="192.168.1.0/24"
+              placeholder="192.168.178.0/24"
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-44"
               disabled={!!isRunning}
             />

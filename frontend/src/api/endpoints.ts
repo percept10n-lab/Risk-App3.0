@@ -29,6 +29,16 @@ export const threatsApi = {
   create: (data: Partial<Threat>) => api.post<Threat>('/threats', data),
   update: (id: string, data: Partial<Threat>) => api.put<Threat>(`/threats/${id}`, data),
   delete: (id: string) => api.delete(`/threats/${id}`),
+  generate: (data?: { asset_id?: string; run_id?: string }) =>
+    api.post('/threats/generate', data || {}),
+  zoneAnalysis: (data: { zone: string; run_id?: string }) =>
+    api.post('/threats/zone-analysis', data),
+}
+
+// Vuln Scan
+export const vulnScanApi = {
+  scan: (data?: { asset_id?: string; run_id?: string; timeout?: number }) =>
+    api.post('/findings/scan', data || {}),
 }
 
 // Risks

@@ -5,6 +5,7 @@ import AssetsPage from './components/assets/AssetsPage'
 import AssetDetailPage from './components/assets/AssetDetailPage'
 import FindingsPage from './components/findings/FindingsPage'
 import FindingDetailPage from './components/findings/FindingDetailPage'
+import ThreatsPage from './components/threats/ThreatsPage'
 import RisksPage from './components/risks/RisksPage'
 import MitrePage from './components/mitre/MitrePage'
 import WorkflowPage from './components/workflow/WorkflowPage'
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/assets/:id" element={<AssetDetailPage />} />
         <Route path="/findings" element={<FindingsPage />} />
         <Route path="/findings/:id" element={<FindingDetailPage />} />
+        <Route path="/threats" element={<ThreatsPage />} />
         <Route path="/risks" element={<RisksPage />} />
         <Route path="/mitre" element={<MitrePage />} />
         <Route path="/workflow" element={<WorkflowPage />} />

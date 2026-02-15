@@ -78,7 +78,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
     async with async_session() as db:
         completed_steps: list[str] = []
         try:
-            subnet = (scope.get("subnets") or ["192.168.1.0/24"])[0]
+            subnet = (scope.get("subnets") or ["192.168.178.0/24"])[0]
 
             # Step 1: Discovery
             await _update_run_step(db, run_id, "discovery", completed_steps)

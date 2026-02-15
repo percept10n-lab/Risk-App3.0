@@ -16,7 +16,7 @@ router = APIRouter()
 
 
 class DiscoveryRequest(BaseModel):
-    subnet: str = "192.168.1.0/24"
+    subnet: str = "192.168.178.0/24"
     timeout: int = 60
     run_id: str | None = None
 
@@ -50,7 +50,7 @@ async def run_fingerprinting(request: FingerprintRequest, db: AsyncSession = Dep
 
 
 class FullScanRequest(BaseModel):
-    subnet: str = "192.168.1.0/24"
+    subnet: str = "192.168.178.0/24"
     timeout: int = 900
     include_threat_modeling: bool = True
     include_vuln_scan: bool = True

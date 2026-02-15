@@ -170,7 +170,7 @@ class DiscoveryService:
         """Return simulated home network devices for demo/Docker environments."""
         return [
             {
-                "ip_address": "192.168.1.1", "hostname": "router.local",
+                "ip_address": "192.168.178.1", "hostname": "router.local",
                 "vendor": "TP-Link", "mac_address": "B4:E6:2D:AA:BB:01",
                 "asset_type": "router", "zone": "lan", "criticality": "critical",
                 "os_guess": "Embedded/Router",
@@ -179,7 +179,7 @@ class DiscoveryService:
                              "smb_exposed": False, "upnp": True, "ftp_exposed": False},
             },
             {
-                "ip_address": "192.168.1.10", "hostname": "nas.local",
+                "ip_address": "192.168.178.10", "hostname": "nas.local",
                 "vendor": "Synology", "mac_address": "00:11:32:AA:BB:02",
                 "asset_type": "nas", "zone": "lan", "criticality": "high",
                 "os_guess": "Synology DSM (Linux)",
@@ -188,7 +188,7 @@ class DiscoveryService:
                              "smb_exposed": True, "upnp": False, "ftp_exposed": False},
             },
             {
-                "ip_address": "192.168.1.20", "hostname": "desktop-pc.local",
+                "ip_address": "192.168.178.20", "hostname": "desktop-pc.local",
                 "vendor": "Dell", "mac_address": "F8:B1:56:AA:BB:03",
                 "asset_type": "workstation", "zone": "lan", "criticality": "high",
                 "os_guess": "Windows 11",
@@ -197,7 +197,7 @@ class DiscoveryService:
                              "smb_exposed": True, "upnp": False, "ftp_exposed": False},
             },
             {
-                "ip_address": "192.168.1.30", "hostname": "smart-tv.local",
+                "ip_address": "192.168.178.30", "hostname": "smart-tv.local",
                 "vendor": "Samsung", "mac_address": "54:E1:AD:AA:BB:04",
                 "asset_type": "iot", "zone": "iot", "criticality": "low",
                 "os_guess": "Tizen (Smart TV)",
@@ -206,7 +206,7 @@ class DiscoveryService:
                              "smb_exposed": False, "upnp": True, "ftp_exposed": False},
             },
             {
-                "ip_address": "192.168.1.40", "hostname": "hue-bridge.local",
+                "ip_address": "192.168.178.40", "hostname": "hue-bridge.local",
                 "vendor": "Philips Hue", "mac_address": "00:17:88:AA:BB:05",
                 "asset_type": "iot", "zone": "iot", "criticality": "medium",
                 "os_guess": "Embedded/IoT Hub",
@@ -215,7 +215,7 @@ class DiscoveryService:
                              "smb_exposed": False, "upnp": True, "ftp_exposed": False},
             },
             {
-                "ip_address": "192.168.1.50", "hostname": "printer.local",
+                "ip_address": "192.168.178.50", "hostname": "printer.local",
                 "vendor": "HP", "mac_address": "3C:97:0E:AA:BB:06",
                 "asset_type": "iot", "zone": "lan", "criticality": "low",
                 "os_guess": "Embedded/Printer",
@@ -224,7 +224,7 @@ class DiscoveryService:
                              "smb_exposed": False, "upnp": False, "ftp_exposed": False},
             },
             {
-                "ip_address": "192.168.1.60", "hostname": "ipcam-garage.local",
+                "ip_address": "192.168.178.60", "hostname": "ipcam-garage.local",
                 "vendor": "Hikvision", "mac_address": "AC:CF:5C:AA:BB:07",
                 "asset_type": "iot", "zone": "iot", "criticality": "medium",
                 "os_guess": "Embedded/IP Camera",
@@ -233,7 +233,7 @@ class DiscoveryService:
                              "smb_exposed": False, "upnp": True, "ftp_exposed": True},
             },
             {
-                "ip_address": "192.168.1.70", "hostname": "pihole.local",
+                "ip_address": "192.168.178.70", "hostname": "pihole.local",
                 "vendor": "Raspberry Pi", "mac_address": "B8:27:EB:AA:BB:08",
                 "asset_type": "server", "zone": "lan", "criticality": "high",
                 "os_guess": "Linux (Raspberry Pi)",
