@@ -53,7 +53,17 @@
       "WebFetch(domain:localhost)",
       "Bash(git -C \"D:/Risk-App3.0\" status)",
       "Bash(git init:*)",
-      "Bash(git -C \"D:/Risk-App3.0\" add .gitignore .dockerignore .env.example README.md docker-compose.yml backend/ frontend/ mcp_servers/ config/ docs/ .claude/)"
+      "Bash(git -C \"D:/Risk-App3.0\" add .gitignore .dockerignore .env.example README.md docker-compose.yml backend/ frontend/ mcp_servers/ config/ docs/ .claude/)",
+      "Bash(git -C \"D:/Risk-App3.0\" status --short)",
+      "Bash(git -C \"D:/Risk-App3.0\" commit -m \"$\\(cat <<''EOF''\nInitial commit: Risk Platform with Nmap, Risk Analysis, and Pentest improvements\n\nIncludes full codebase \\(Phase 1-2\\) plus three key fixes:\n- Nmap: Remove 6 root-requiring scan profiles, add 3 non-root alternatives\n  \\(Quick Scan, Full Service Detection, DNS Enumeration\\), add CIDR notation\n  support with multi-host finding storage\n- Risk Analysis: Rewrite _is_related\\(\\) with strict port/service matching\n  to eliminate false positives \\(e.g. Telnet threat no longer matches HTTP\n  finding\\), mark threat-without-finding risks as [Theoretical]\n- Pentest: Add result popup modal on test completion showing findings with\n  collapsible evidence and remediation details\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"D:/Risk-App3.0\" config user.name \"badger\")",
+      "Bash(git -C \"D:/Risk-App3.0\" config user.email \"badger@gmx.de\")",
+      "Bash(findstr:*)",
+      "Bash(where.exe:*)",
+      "Bash(cmd.exe /c \"docker compose up -d --build\")",
+      "Bash(git status:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nPhase 3: Add Threat Modeling frontend and fix network subnet to 192.168.178.0/24\n\n- Add ThreatsPage with 3 tabs: threat list \\(STRIDE badges, expandable rows, filters\\),\n  generate \\(per-asset, all-assets, zone analysis\\), and trust boundaries overview\n- Add threatStore \\(Zustand\\) for threat state management\n- Add vuln scan modal to FindingsPage with asset selector and result display\n- Add threat generate/zoneAnalysis and vulnScanApi endpoints\n- Add zone/source filtering to backend threats list endpoint\n- Update all network defaults from 192.168.1.0/24 to 192.168.178.0/24\n- Add Threats nav item to sidebar\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }

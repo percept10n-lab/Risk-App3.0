@@ -11,7 +11,6 @@ from app.database import get_db
 from app.models.asset import Asset
 from app.models.finding import Finding
 from app.models.risk import Risk
-from app.models.threat import Threat
 from app.models.mitre_mapping import MitreMapping
 from app.services.report_service import ReportService
 from app.evidence.artifact_store import ArtifactStore
@@ -23,6 +22,13 @@ class ReportGenerateRequest(BaseModel):
     report_type: str = "html"  # html, pdf, json, csv
     run_id: str | None = None
     title: str = "Risk Assessment Report"
+
+
+@router.get("/summary")
+async def get_summary(db: AsyncSession = Depends(get_db)):
+    """Get executive summary with counts and breakdowns."""
+    service = ReportService(db)
+    return await service.get_summary()
 
 
 @router.post("/generate")
@@ -91,7 +97,15 @@ async def generate_report(request: ReportGenerateRequest, db: AsyncSession = Dep
     report_id = str(uuid.uuid4())
 
     if request.report_type == "html":
-        from mcp_servers.reporting.html_report import HTMLReportGenerator
+        try:
+            from mcp_servers.reporting.html_report import HTMLReportGenerator
+        except ImportError:
+            import sys
+            from pathlib import Path
+            project_root = str(Path(__file__).resolve().parents[3])
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+            from mcp_servers.reporting.html_report import HTMLReportGenerator
         generator = HTMLReportGenerator()
         html_content = generator.generate(report_data)
 

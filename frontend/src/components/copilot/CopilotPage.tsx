@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import PageHeader from '../common/PageHeader'
 import Badge from '../common/Badge'
 import { Bot, Lightbulb, Wrench, FileText, Loader2, ChevronDown, ChevronUp, Play, CheckCircle2, XCircle, RotateCcw, ArrowRight } from 'lucide-react'
-import api from '../../api/client'
+import { copilotApi } from '../../api/endpoints'
 
 interface TriageItem {
   finding_id: string
@@ -35,7 +34,6 @@ interface InvestigateData {
 export default function CopilotPage() {
   const [triageResults, setTriageResults] = useState<TriageItem[]>([])
   const [loading, setLoading] = useState<Record<string, boolean>>({})
-  const navigate = useNavigate()
 
   // Workflow state
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
@@ -51,7 +49,7 @@ export default function CopilotPage() {
   async function runTriage() {
     setLoading((p) => ({ ...p, triage: true }))
     try {
-      const res = await api.post('/copilot/triage', {})
+      const res = await copilotApi.triage([])
       setTriageResults(res.data.findings || [])
     } catch { /* empty */ }
     setLoading((p) => ({ ...p, triage: false }))
@@ -65,7 +63,7 @@ export default function CopilotPage() {
     setVerifyResult(null)
     setLoading((p) => ({ ...p, investigate: true }))
     try {
-      const res = await api.post('/copilot/investigate', { finding_id: findingId })
+      const res = await copilotApi.investigate(findingId)
       setInvestigateData(res.data)
       setCurrentStep('PLAN')
     } catch { /* empty */ }
@@ -77,7 +75,7 @@ export default function CopilotPage() {
     setCurrentStep('EXECUTE')
     setLoading((p) => ({ ...p, execute: true }))
     try {
-      const res = await api.post('/copilot/execute-remediation', {
+      const res = await copilotApi.executeRemediation({
         finding_id: selectedFindingId,
         action: 'set_in_progress',
       })
@@ -91,10 +89,10 @@ export default function CopilotPage() {
     setCurrentStep('VERIFY')
     setLoading((p) => ({ ...p, verify: true }))
     try {
-      const res = await api.post('/copilot/verify', {
+      const res = await copilotApi.verify({
         finding_id: selectedFindingId,
         action_id: 'port_verify',
-        target: investigateData?.asset?.ip_address || null,
+        target: investigateData?.asset?.ip_address || '',
       })
       setVerifyResult(res.data)
       setCurrentStep('REPORT')
@@ -105,7 +103,7 @@ export default function CopilotPage() {
   async function markAsFixed() {
     if (!selectedFindingId) return
     try {
-      await api.post('/copilot/execute-remediation', {
+      await copilotApi.executeRemediation({
         finding_id: selectedFindingId,
         action: 'set_fixed',
       })
@@ -210,7 +208,6 @@ export default function CopilotPage() {
                   {STEP_ORDER.map((step, i) => {
                     const isCompleted = i < stepIndex
                     const isActive = i === stepIndex
-                    const isPending = i > stepIndex
                     return (
                       <div key={step} className="flex items-center flex-1">
                         <div className="flex flex-col items-center">

@@ -1,10 +1,17 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.services.drift_service import DriftService
 
 router = APIRouter()
+
+
+class BaselineCreateRequest(BaseModel):
+    zone: str = "lan"
+    baseline_type: str = "full"
+    run_id: str | None = None
 
 
 @router.get("/changes")
@@ -16,17 +23,15 @@ async def list_changes(zone: str | None = None, db: AsyncSession = Depends(get_d
 
 @router.post("/baseline")
 async def create_baseline(
-    zone: str,
-    baseline_type: str = "full",
-    run_id: str | None = None,
+    body: BaselineCreateRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """Create a baseline snapshot for a network zone."""
     service = DriftService(db)
     return await service.create_baseline(
-        zone=zone,
-        baseline_type=baseline_type,
-        run_id=run_id,
+        zone=body.zone,
+        baseline_type=body.baseline_type,
+        run_id=body.run_id,
     )
 
 

@@ -75,18 +75,42 @@ export const runsApi = {
 
 // Reports
 export const reportsApi = {
-  generate: (data: { report_type: string; run_id?: string }) => api.post('/reports/generate', null, { params: data }),
+  summary: () => api.get('/reports/summary'),
+  generate: (data: { report_type: string; run_id?: string; title?: string }) => api.post('/reports/generate', data),
   get: (id: string) => api.get(`/reports/${id}`),
   download: (id: string) => api.get(`/reports/${id}/download`, { responseType: 'blob' }),
+}
+
+// Pentest
+export const pentestApi = {
+  listActions: () => api.get('/pentest/actions'),
+  execute: (data: { action_id: string; target: string; run_id?: string; params?: Record<string, any> }) =>
+    api.post('/pentest/execute', data),
+  history: (params?: Record<string, any>) => api.get('/pentest/history', { params }),
+  verifyScope: (data: { target: string }) => api.post('/pentest/verify-scope', data),
 }
 
 // Copilot
 export const copilotApi = {
   triage: (findingIds: string[]) => api.post('/copilot/triage', { finding_ids: findingIds }),
   remediation: (findingId: string, context?: any) => api.post('/copilot/remediation', { finding_id: findingId, context }),
+  investigate: (findingId: string) => api.post('/copilot/investigate', { finding_id: findingId }),
+  executeRemediation: (data: { finding_id: string; action: string; params?: any }) =>
+    api.post('/copilot/execute-remediation', data),
+  verify: (data: { finding_id: string; action_id: string; target: string }) =>
+    api.post('/copilot/verify', data),
   mitreSuggest: (findingId: string) => api.post('/copilot/mitre-suggest', null, { params: { finding_id: findingId } }),
   narrative: (data: any) => api.post('/copilot/narrative', data),
   suggestions: () => api.get('/copilot/suggestions'),
+}
+
+// Drift
+export const driftApi = {
+  changes: (params?: { zone?: string }) => api.get('/drift/changes', { params }),
+  alerts: (params?: { zone?: string }) => api.get('/drift/alerts', { params }),
+  baselines: (params?: { zone?: string }) => api.get('/drift/baselines', { params }),
+  createBaseline: (data: { zone: string; baseline_type?: string; run_id?: string }) =>
+    api.post('/drift/baseline', data),
 }
 
 // Settings
