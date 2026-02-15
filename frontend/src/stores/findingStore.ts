@@ -36,7 +36,7 @@ export const useFindingStore = create<FindingState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const { page, pageSize, filters } = get()
-      const params = { page, page_size: pageSize, ...filters }
+      const params = { page, page_size: pageSize, include_asset: true, include_mitre: true, ...filters }
       const response = await findingsApi.list(params)
       set({
         findings: response.data.items,

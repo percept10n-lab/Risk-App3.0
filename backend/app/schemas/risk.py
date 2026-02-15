@@ -35,6 +35,7 @@ class RiskUpdate(BaseModel):
 class TreatmentRequest(BaseModel):
     treatment: str  # mitigate, transfer, avoid, accept
     treatment_plan: str | None = None
+    treatment_measures: list[str] | None = None
     treatment_owner: str | None = None
     treatment_due_date: date | None = None
     residual_risk_level: str | None = None
@@ -56,6 +57,7 @@ class RiskResponse(BaseModel):
     availability_impact: str
     treatment: str | None = None
     treatment_plan: str | None = None
+    treatment_measures: list[str] | None = None
     treatment_owner: str | None = None
     treatment_due_date: date | None = None
     likelihood_factors: dict | None = None

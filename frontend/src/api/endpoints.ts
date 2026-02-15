@@ -10,6 +10,12 @@ export const assetsApi = {
   delete: (id: string) => api.delete(`/assets/${id}`),
   override: (id: string, data: { field: string; value: any; rationale: string }) =>
     api.post(`/assets/${id}/override`, data),
+  detectGateway: () => api.get('/assets/detect-gateway'),
+}
+
+// Discovery
+export const discoveryApi = {
+  discover: (data: { subnet: string; timeout?: number }) => api.post('/scan/discover', data),
 }
 
 // Findings

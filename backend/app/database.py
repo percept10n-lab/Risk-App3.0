@@ -49,3 +49,7 @@ async def init_db():
             await conn.execute(text("ALTER TABLE risks ADD COLUMN impact_factors JSON"))
         except Exception:
             pass
+        try:
+            await conn.execute(text("ALTER TABLE risks ADD COLUMN treatment_measures JSON"))
+        except Exception:
+            pass

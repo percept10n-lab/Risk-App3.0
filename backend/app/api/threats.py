@@ -6,6 +6,9 @@ from sqlalchemy import select, func as sa_func
 
 from app.database import get_db
 from app.models.threat import Threat
+from app.models.asset import Asset
+from app.models.finding import Finding
+from app.models.mitre_mapping import MitreMapping
 from app.schemas.threat import ThreatCreate, ThreatUpdate, ThreatResponse
 from app.schemas.common import PaginatedResponse
 from app.services.threat_service import ThreatService
@@ -13,7 +16,7 @@ from app.services.threat_service import ThreatService
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[ThreatResponse])
+@router.get("")
 async def list_threats(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -21,6 +24,9 @@ async def list_threats(
     threat_type: str | None = None,
     zone: str | None = None,
     source: str | None = None,
+    include_asset: bool = False,
+    include_findings: bool = False,
+    include_mitre: bool = False,
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Threat)
@@ -39,7 +45,63 @@ async def list_threats(
         count_query = count_query.where(Threat.source == source)
     total = (await db.execute(count_query)).scalar() or 0
     result = await db.execute(query.offset((page - 1) * page_size).limit(page_size).order_by(Threat.created_at.desc()))
-    return PaginatedResponse(items=result.scalars().all(), total=total, page=page, page_size=page_size)
+    items = list(result.scalars().all())
+
+    serialized = [ThreatResponse.model_validate(t).model_dump() for t in items]
+
+    if not include_asset and not include_findings and not include_mitre:
+        return {"items": serialized, "total": total, "page": page, "page_size": page_size}
+
+    # Enrich with asset data
+    asset_cache: dict[str, dict | None] = {}
+    if include_asset:
+        asset_ids = list({t.asset_id for t in items if t.asset_id})
+        if asset_ids:
+            asset_result = await db.execute(select(Asset).where(Asset.id.in_(asset_ids)))
+            for a in asset_result.scalars().all():
+                asset_cache[a.id] = {"id": a.id, "hostname": a.hostname, "ip_address": a.ip_address}
+
+    # Enrich with linked findings
+    finding_cache: dict[str, list] = {}
+    if include_findings:
+        all_finding_ids: list[str] = []
+        for t in items:
+            fids = t.linked_finding_ids or []
+            all_finding_ids.extend(fids)
+        unique_finding_ids = list(set(all_finding_ids))
+        finding_map: dict[str, dict] = {}
+        if unique_finding_ids:
+            finding_result = await db.execute(select(Finding).where(Finding.id.in_(unique_finding_ids)))
+            for f in finding_result.scalars().all():
+                finding_map[f.id] = {"id": f.id, "title": f.title, "severity": f.severity}
+        for t in items:
+            fids = t.linked_finding_ids or []
+            finding_cache[t.id] = [finding_map[fid] for fid in fids if fid in finding_map]
+
+    # Enrich with MITRE techniques
+    mitre_cache: dict[str, list] = {}
+    if include_mitre:
+        threat_ids = [t.id for t in items]
+        if threat_ids:
+            mitre_result = await db.execute(
+                select(MitreMapping).where(MitreMapping.threat_id.in_(threat_ids))
+            )
+            for m in mitre_result.scalars().all():
+                mitre_cache.setdefault(m.threat_id, []).append({
+                    "technique_id": m.technique_id,
+                    "technique_name": m.technique_name,
+                    "tactic": m.tactic,
+                })
+
+    for item_dict in serialized:
+        if include_asset:
+            item_dict["asset"] = asset_cache.get(item_dict.get("asset_id") or "")
+        if include_findings:
+            item_dict["linked_findings"] = finding_cache.get(item_dict["id"], [])
+        if include_mitre:
+            item_dict["mitre_techniques"] = mitre_cache.get(item_dict["id"], [])
+
+    return {"items": serialized, "total": total, "page": page, "page_size": page_size}
 
 
 @router.post("", response_model=ThreatResponse, status_code=201)

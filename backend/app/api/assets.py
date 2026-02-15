@@ -14,6 +14,60 @@ from app.schemas.common import PaginatedResponse
 router = APIRouter()
 
 
+@router.get("/detect-gateway")
+async def detect_gateway():
+    """Detect the default gateway and return a suggested CIDR for discovery."""
+    import asyncio
+    import platform
+    import re
+
+    try:
+        system = platform.system().lower()
+        if system == "linux":
+            proc = await asyncio.create_subprocess_exec(
+                "ip", "route", "show", "default",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            output = stdout.decode().strip()
+            # e.g. "default via 192.168.178.1 dev eth0"
+            match = re.search(r"default via ([\d.]+)", output)
+            if match:
+                gateway = match.group(1)
+                # Assume /24 network from gateway IP
+                parts = gateway.split(".")
+                cidr = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+                return {"gateway": gateway, "cidr": cidr}
+        elif system == "windows":
+            proc = await asyncio.create_subprocess_shell(
+                'powershell -Command "Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Select-Object -First 1 -ExpandProperty NextHop"',
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+            gateway = stdout.decode().strip()
+            if re.match(r"^\d+\.\d+\.\d+\.\d+$", gateway):
+                parts = gateway.split(".")
+                cidr = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+                return {"gateway": gateway, "cidr": cidr}
+        # Docker / fallback — try ip route
+        proc = await asyncio.create_subprocess_exec(
+            "ip", "route", "show", "default",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+        output = stdout.decode().strip()
+        match = re.search(r"default via ([\d.]+)", output)
+        if match:
+            gateway = match.group(1)
+            parts = gateway.split(".")
+            cidr = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+            return {"gateway": gateway, "cidr": cidr}
+    except Exception:
+        pass
+
+    return {"gateway": None, "cidr": "192.168.1.0/24"}
+
+
 @router.get("", response_model=PaginatedResponse[AssetResponse])
 async def list_assets(
     page: int = Query(1, ge=1),

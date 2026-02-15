@@ -72,6 +72,7 @@ class Risk(Base):
     treatment_owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
     treatment_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     residual_risk_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    treatment_measures: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     likelihood_factors: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     impact_factors: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=RiskStatus.identified.value, index=True)

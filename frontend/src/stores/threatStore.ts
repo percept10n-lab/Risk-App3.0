@@ -34,7 +34,7 @@ export const useThreatStore = create<ThreatState>((set, get) => ({
     set({ loading: true, error: null })
     try {
       const { page, pageSize, filters } = get()
-      const params = { page, page_size: pageSize, ...filters }
+      const params = { page, page_size: pageSize, include_asset: true, include_findings: true, include_mitre: true, ...filters }
       const response = await threatsApi.list(params)
       set({
         threats: response.data.items,

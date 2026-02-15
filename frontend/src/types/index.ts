@@ -89,6 +89,7 @@ export interface Risk {
   impact_factors: Record<string, any> | null
   treatment: string | null
   treatment_plan: string | null
+  treatment_measures: string[] | null
   treatment_owner: string | null
   treatment_due_date: string | null
   residual_risk_level: string | null

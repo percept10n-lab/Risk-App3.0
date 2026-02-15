@@ -6,10 +6,12 @@ import Badge from '../common/Badge'
 import { useRiskStore } from '../../stores/riskStore'
 import { risksApi } from '../../api/endpoints'
 import { formatRelativeTime } from '../../utils/format'
+import { getContextualOptions } from '../../data/treatmentOptions'
+import type { TreatmentOption } from '../../data/treatmentOptions'
 import type { Risk } from '../../types'
 import {
   ChevronDown, ChevronRight, Loader2, Play, Shield,
-  AlertTriangle, Eye, Clock,
+  AlertTriangle, Eye, Clock, CheckSquare,
 } from 'lucide-react'
 
 type TabKey = 'register' | 'matrix' | 'analysis' | 'treatment'
@@ -59,8 +61,10 @@ export default function RisksPage() {
 
   // Treatment state
   const [treatmentModal, setTreatmentModal] = useState<{ riskId: string; risk: Risk } | null>(null)
-  const [treatmentForm, setTreatmentForm] = useState({ treatment: 'mitigate', treatment_plan: '', treatment_owner: '', treatment_due_date: '', residual_risk_level: '' })
+  const [treatmentForm, setTreatmentForm] = useState({ treatment: 'mitigate', treatment_plan: '', treatment_measures: [] as string[], treatment_owner: '', treatment_due_date: '', residual_risk_level: '' })
   const [treatmentSaving, setTreatmentSaving] = useState(false)
+  const [treatmentContext, setTreatmentContext] = useState<any>(null)
+  const [treatmentContextLoading, setTreatmentContextLoading] = useState(false)
 
   // Asset cache for register grouping
   const [assetCache, setAssetCache] = useState<Record<string, { hostname: string | null; ip_address: string }>>({})
@@ -151,6 +155,7 @@ export default function RisksPage() {
       await risksApi.treat(treatmentModal.riskId, {
         treatment: treatmentForm.treatment,
         treatment_plan: treatmentForm.treatment_plan || null,
+        treatment_measures: treatmentForm.treatment_measures.length > 0 ? treatmentForm.treatment_measures : null,
         treatment_owner: treatmentForm.treatment_owner || null,
         treatment_due_date: treatmentForm.treatment_due_date || null,
         residual_risk_level: treatmentForm.residual_risk_level || null,
@@ -307,7 +312,7 @@ export default function RisksPage() {
                                 <div className="w-20 shrink-0">
                                   <Badge variant={r.risk_level as any}>{r.risk_level}</Badge>
                                 </div>
-                                <p className="text-sm truncate flex-1 min-w-0">{r.scenario}</p>
+                                <p className="text-sm line-clamp-2 flex-1 min-w-0" title={r.scenario}>{r.scenario}</p>
                                 <span className="capitalize text-xs text-gray-400 w-16 shrink-0">{r.likelihood.replace('_', ' ')}</span>
                                 <span className="capitalize text-xs text-gray-400 w-16 shrink-0">{r.impact}</span>
                                 {r.treatment ? <Badge variant="info">{r.treatment}</Badge> : <span className="text-gray-300 text-xs w-16">—</span>}
@@ -528,7 +533,7 @@ export default function RisksPage() {
                     {matrixData.cell_risks[selectedCell].map((r: any) => (
                       <div key={r.id} className="px-4 py-2 flex items-center gap-3">
                         <Badge variant={r.risk_level as any}>{r.risk_level}</Badge>
-                        <span className="text-sm flex-1 truncate">{r.scenario}</span>
+                        <span className="text-sm flex-1 line-clamp-2" title={r.scenario}>{r.scenario}</span>
                         <span className="text-xs capitalize text-gray-400">{r.status}</span>
                         {r.treated && (
                           <span className="text-xs text-green-600 font-medium">
@@ -612,7 +617,7 @@ export default function RisksPage() {
                       <ChevronRight className="w-4 h-4 text-gray-500" />
                     )}
                     <Badge variant={r.risk_level as any}>{r.risk_level}</Badge>
-                    <span className="text-sm flex-1 truncate">{r.scenario}</span>
+                    <span className="text-sm flex-1 line-clamp-2" title={r.scenario}>{r.scenario}</span>
                     <span className="text-xs text-gray-400 capitalize">{r.status}</span>
                   </button>
 
@@ -716,9 +721,13 @@ export default function RisksPage() {
               </h3>
               <div className="space-y-2">
                 {untreated.map((r) => (
-                  <TreatmentCard key={r.id} risk={r} onTreat={() => {
+                  <TreatmentCard key={r.id} risk={r} onTreat={async () => {
                     setTreatmentModal({ riskId: r.id, risk: r })
-                    setTreatmentForm({ treatment: 'mitigate', treatment_plan: '', treatment_owner: '', treatment_due_date: '', residual_risk_level: '' })
+                    setTreatmentForm({ treatment: 'mitigate', treatment_plan: '', treatment_measures: [], treatment_owner: '', treatment_due_date: '', residual_risk_level: '' })
+                    setTreatmentContext(null)
+                    setTreatmentContextLoading(true)
+                    try { const res = await risksApi.getFullContext(r.id); setTreatmentContext(res.data) } catch { /* empty */ }
+                    setTreatmentContextLoading(false)
                   }} />
                 ))}
                 {untreated.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No untreated risks</p>}
@@ -733,15 +742,20 @@ export default function RisksPage() {
               </h3>
               <div className="space-y-2">
                 {treated.map((r) => (
-                  <TreatmentCard key={r.id} risk={r} onTreat={() => {
+                  <TreatmentCard key={r.id} risk={r} onTreat={async () => {
                     setTreatmentModal({ riskId: r.id, risk: r })
                     setTreatmentForm({
                       treatment: r.treatment || 'mitigate',
                       treatment_plan: r.treatment_plan || '',
+                      treatment_measures: (r as any).treatment_measures || [],
                       treatment_owner: r.treatment_owner || '',
                       treatment_due_date: r.treatment_due_date || '',
                       residual_risk_level: r.residual_risk_level || '',
                     })
+                    setTreatmentContext(null)
+                    setTreatmentContextLoading(true)
+                    try { const res = await risksApi.getFullContext(r.id); setTreatmentContext(res.data) } catch { /* empty */ }
+                    setTreatmentContextLoading(false)
                   }} />
                 ))}
                 {treated.length === 0 && <p className="text-xs text-gray-400 text-center py-4">No treated risks</p>}
@@ -764,25 +778,82 @@ export default function RisksPage() {
           </div>
 
           {/* Treatment Modal */}
-          {treatmentModal && (
+          {treatmentModal && (() => {
+            // Build context tags for relevance scoring
+            const ctxTags: string[] = []
+            if (treatmentContext?.threat?.threat_type) ctxTags.push(treatmentContext.threat.threat_type)
+            if (treatmentContext?.finding?.category) ctxTags.push(treatmentContext.finding.category)
+            if (treatmentContext?.finding?.severity) ctxTags.push(treatmentContext.finding.severity)
+            const exposure = (treatmentContext as any)?.asset?.exposure
+            if (exposure) Object.entries(exposure).forEach(([k, v]) => { if (v) ctxTags.push(`exposure_${k}`) })
+            const zone = (treatmentContext as any)?.asset?.zone
+            if (zone) ctxTags.push(`zone_${zone}`)
+            const measuresOptions = getContextualOptions(treatmentForm.treatment, ctxTags)
+            const toggleMeasure = (id: string) => {
+              setTreatmentForm((f) => ({
+                ...f,
+                treatment_measures: f.treatment_measures.includes(id)
+                  ? f.treatment_measures.filter((m) => m !== id)
+                  : [...f.treatment_measures, id],
+              }))
+            }
+
+            return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
                 <h3 className="font-semibold mb-4">Update Treatment</h3>
-                <p className="text-sm text-gray-500 mb-4 truncate">{treatmentModal.risk.scenario}</p>
+                <p className="text-sm text-gray-500 mb-4 line-clamp-2" title={treatmentModal.risk.scenario}>{treatmentModal.risk.scenario}</p>
 
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">Treatment Type</label>
-                    <select value={treatmentForm.treatment} onChange={(e) => setTreatmentForm((f) => ({ ...f, treatment: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm">
+                    <select value={treatmentForm.treatment} onChange={(e) => setTreatmentForm((f) => ({ ...f, treatment: e.target.value, treatment_measures: [] }))} className="w-full px-3 py-2 border rounded-lg text-sm">
                       <option value="mitigate">Mitigate</option>
                       <option value="transfer">Transfer</option>
                       <option value="avoid">Avoid</option>
                       <option value="accept">Accept</option>
                     </select>
                   </div>
+
+                  {/* Treatment Measures Checklist */}
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Treatment Plan</label>
-                    <textarea value={treatmentForm.treatment_plan} onChange={(e) => setTreatmentForm((f) => ({ ...f, treatment_plan: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm" rows={3} placeholder="Describe the treatment plan..." />
+                    <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      Treatment Measures
+                      {treatmentContextLoading && <Loader2 className="w-3 h-3 animate-spin text-gray-400 ml-1" />}
+                    </label>
+                    <div className="max-h-52 overflow-y-auto border rounded-lg divide-y">
+                      {measuresOptions.map((opt: TreatmentOption) => (
+                        <label key={opt.id} className="flex items-start gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={treatmentForm.treatment_measures.includes(opt.id)}
+                            onChange={() => toggleMeasure(opt.id)}
+                            className="mt-0.5 rounded border-gray-300"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{opt.label}</p>
+                            <p className="text-xs text-gray-500">{opt.description}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {opt.iso27001_controls.map((ctrl) => (
+                                <span key={ctrl} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-mono">{ctrl}</span>
+                              ))}
+                              {opt.mitre_mitigations.map((mit) => (
+                                <span key={mit} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-mono">{mit}</span>
+                              ))}
+                            </div>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                    {treatmentForm.treatment_measures.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">{treatmentForm.treatment_measures.length} measure(s) selected</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Additional Notes</label>
+                    <textarea value={treatmentForm.treatment_plan} onChange={(e) => setTreatmentForm((f) => ({ ...f, treatment_plan: e.target.value }))} className="w-full px-3 py-2 border rounded-lg text-sm" rows={3} placeholder="Describe any additional treatment plan details..." />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -815,7 +886,8 @@ export default function RisksPage() {
                 </div>
               </div>
             </div>
-          )}
+            )
+          })()}
         </div>
       )}
     </div>
@@ -842,7 +914,7 @@ function TreatmentCard({ risk, onTreat }: { risk: Risk; onTreat?: () => void }) 
           <span className="text-xs text-gray-400">&rarr; <Badge variant={risk.residual_risk_level as any}>{risk.residual_risk_level}</Badge></span>
         )}
       </div>
-      <p className="text-xs text-gray-700 truncate mb-2">{risk.scenario}</p>
+      <p className="text-xs text-gray-700 line-clamp-2 mb-2" title={risk.scenario}>{risk.scenario}</p>
       <div className="flex items-center justify-between">
         {slaText && (
           <span className={`text-xs ${slaText.includes('overdue') ? 'text-red-600 font-medium' : 'text-gray-400'}`}>

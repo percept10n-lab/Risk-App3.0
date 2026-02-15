@@ -194,7 +194,9 @@ function ThreatsTab() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8" />
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asset</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Zone</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">MITRE</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Confidence</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
@@ -223,11 +225,15 @@ function ThreatsTab() {
 }
 
 function ThreatRow({ threat, expanded, onToggle, onDelete }: {
-  threat: Threat
+  threat: any
   expanded: boolean
   onToggle: () => void
   onDelete: () => void
 }) {
+  const mitreTechniques: any[] = threat.mitre_techniques || []
+  const linkedFindings: any[] = threat.linked_findings || []
+  const asset: any = threat.asset || null
+
   return (
     <>
       <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={onToggle}>
@@ -241,9 +247,33 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
         </td>
         <td className="px-4 py-3">
           <p className="font-medium text-sm">{threat.title}</p>
-          <p className="text-xs text-gray-500 mt-0.5 truncate max-w-md">{threat.description}</p>
+          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2" title={threat.description}>{threat.description}</p>
+        </td>
+        <td className="px-4 py-3">
+          {asset ? (
+            <div className="text-xs">
+              <span className="font-mono">{asset.ip_address}</span>
+              {asset.hostname && <span className="text-gray-500 ml-1">({asset.hostname})</span>}
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">—</span>
+          )}
         </td>
         <td className="px-4 py-3 text-sm">{zoneLabel[threat.zone || ''] || threat.zone || '—'}</td>
+        <td className="px-4 py-3">
+          {mitreTechniques.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {mitreTechniques.slice(0, 2).map((m: any) => (
+                <span key={m.technique_id} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-mono">
+                  {m.technique_id}
+                </span>
+              ))}
+              {mitreTechniques.length > 2 && <span className="text-xs text-purple-500">+{mitreTechniques.length - 2}</span>}
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">—</span>
+          )}
+        </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -272,7 +302,7 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
       </tr>
       {expanded && (
         <tr className="bg-gray-50">
-          <td colSpan={8} className="px-8 py-4">
+          <td colSpan={10} className="px-8 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="font-medium text-gray-700 mb-1">Description</p>
@@ -290,13 +320,40 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
                   <Badge variant="info">{threat.trust_boundary}</Badge>
                 </div>
               )}
-              {threat.linked_finding_ids.length > 0 && (
+              {linkedFindings.length > 0 && (
                 <div>
                   <p className="font-medium text-gray-700 mb-1">Linked Findings</p>
                   <div className="flex flex-wrap gap-1">
-                    {threat.linked_finding_ids.map((fid) => (
+                    {linkedFindings.map((f: any) => (
+                      <span key={f.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 border rounded text-xs">
+                        <Badge variant={f.severity as any}>{f.severity}</Badge>
+                        <span>{f.title}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {linkedFindings.length === 0 && threat.linked_finding_ids?.length > 0 && (
+                <div>
+                  <p className="font-medium text-gray-700 mb-1">Linked Findings</p>
+                  <div className="flex flex-wrap gap-1">
+                    {threat.linked_finding_ids.map((fid: string) => (
                       <span key={fid} className="font-mono text-xs bg-gray-200 px-2 py-0.5 rounded">
                         {fid.slice(0, 8)}...
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {mitreTechniques.length > 0 && (
+                <div>
+                  <p className="font-medium text-gray-700 mb-1">MITRE ATT&CK Techniques</p>
+                  <div className="flex flex-wrap gap-1">
+                    {mitreTechniques.map((m: any) => (
+                      <span key={m.technique_id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs">
+                        <span className="font-mono font-medium">{m.technique_id}</span>
+                        <span className="text-purple-500">{m.technique_name}</span>
+                        <span className="text-purple-400">({m.tactic})</span>
                       </span>
                     ))}
                   </div>

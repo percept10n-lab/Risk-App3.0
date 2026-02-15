@@ -15,7 +15,7 @@ const columns = [
   {
     key: 'severity',
     header: 'Severity',
-    render: (f: Finding) => (
+    render: (f: any) => (
       <Badge variant={f.severity as any}>{f.severity}</Badge>
     ),
     className: 'w-24',
@@ -23,27 +23,60 @@ const columns = [
   {
     key: 'title',
     header: 'Title',
-    render: (f: Finding) => (
+    render: (f: any) => (
       <div>
         <p className="font-medium text-sm">{f.title}</p>
-        <p className="text-xs text-gray-500 mt-0.5 truncate max-w-md">{f.description}</p>
+        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 max-w-lg" title={f.description}>{f.description}</p>
       </div>
     ),
   },
   {
+    key: 'asset',
+    header: 'Asset',
+    render: (f: any) => {
+      if (!f.asset) return <span className="text-xs text-gray-400">—</span>
+      return (
+        <div className="text-xs">
+          <span className="font-mono">{f.asset.ip_address}</span>
+          {f.asset.hostname && <span className="text-gray-500 ml-1">({f.asset.hostname})</span>}
+        </div>
+      )
+    },
+  },
+  {
     key: 'category',
     header: 'Category',
-    render: (f: Finding) => <span className="capitalize text-sm">{f.category}</span>,
+    render: (f: any) => <span className="capitalize text-sm">{f.category}</span>,
   },
   {
     key: 'source_tool',
     header: 'Source',
-    render: (f: Finding) => <span className="font-mono text-xs">{f.source_tool}</span>,
+    render: (f: any) => <span className="font-mono text-xs">{f.source_tool}</span>,
+  },
+  {
+    key: 'mitre',
+    header: 'MITRE',
+    render: (f: any) => {
+      const techniques: any[] = f.mitre_techniques || []
+      if (techniques.length === 0) return <span className="text-xs text-gray-400">—</span>
+      const visible = techniques.slice(0, 2)
+      const overflow = techniques.length - 2
+      return (
+        <div className="flex flex-wrap gap-1">
+          {visible.map((m: any) => (
+            <span key={m.technique_id} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-mono">
+              {m.technique_id}
+            </span>
+          ))}
+          {overflow > 0 && <span className="text-xs text-purple-500">+{overflow}</span>}
+        </div>
+      )
+    },
   },
   {
     key: 'status',
     header: 'Status',
-    render: (f: Finding) => {
+    render: (f: any) => {
       const variant = f.status === 'open' ? 'high' : f.status === 'fixed' ? 'success' : 'info'
       return <Badge variant={variant}>{f.status}</Badge>
     },
@@ -51,7 +84,7 @@ const columns = [
   {
     key: 'created_at',
     header: 'Found',
-    render: (f: Finding) => formatRelativeTime(f.created_at),
+    render: (f: any) => formatRelativeTime(f.created_at),
   },
 ]
 
