@@ -275,7 +275,7 @@ export default function AssetsPage() {
               <p className="text-xs text-gray-400 mt-1">Enter an IP address or CIDR-style network to scan</p>
               {discoveryCidr && (
                 <div className="mt-2 px-3 py-1.5 bg-gray-900 rounded text-xs text-green-400 font-mono">
-                  $ nmap -sS --open -oG - {discoveryCidr}
+                  $ nmap -sS --open -T4 --host-timeout 15s -oG - {discoveryCidr}
                 </div>
               )}
             </div>
@@ -433,7 +433,7 @@ export default function AssetsPage() {
               <p className="text-xs text-gray-400 mt-1">Enter an IP address or CIDR-style network to scan</p>
               {refreshCidr && (
                 <div className="mt-2 px-3 py-1.5 bg-gray-900 rounded text-xs text-green-400 font-mono">
-                  $ nmap -sS --open -oG - {refreshCidr}
+                  $ nmap -sS --open -T4 --host-timeout 15s -oG - {refreshCidr}
                 </div>
               )}
             </div>

@@ -23,7 +23,7 @@ class DiscoveryRequest(BaseModel):
 
 class NmapDiscoverRequest(BaseModel):
     network: str
-    timeout: int = 120
+    timeout: int = 300
 
 
 class FingerprintRequest(BaseModel):

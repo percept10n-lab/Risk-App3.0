@@ -132,7 +132,7 @@ class DiscoveryService:
             raise ValueError("Invalid characters in network target")
 
         # Run nmap subprocess
-        cmd = ["nmap", "-sS", "--open", "-oG", "-", network]
+        cmd = ["nmap", "-sS", "--open", "-T4", "--host-timeout", "15s", "-oG", "-", network]
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
