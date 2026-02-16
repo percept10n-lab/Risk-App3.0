@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import PageHeader from '../common/PageHeader'
 import Badge from '../common/Badge'
 import { useRunStore } from '../../stores/runStore'
-import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle } from 'lucide-react'
+import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle, FileText } from 'lucide-react'
 
 const STEPS = [
   { key: 'discovery', label: 'Asset Discovery', description: 'Scan network for devices' },
@@ -18,6 +19,7 @@ const STEPS = [
 export default function WorkflowPage() {
   const { runs, activeRun, loading, polling, error, fetchRuns, createRun, pauseRun, resumeRun, cancelRun, stopPolling } = useRunStore()
   const [subnet, setSubnet] = useState('192.168.178.0/24')
+  const navigate = useNavigate()
 
   useEffect(() => {
     fetchRuns()
@@ -162,6 +164,14 @@ export default function WorkflowPage() {
                   {['running', 'paused'].includes(activeRun.status) && (
                     <button onClick={() => cancelRun(activeRun.id)} className="btn-danger flex items-center gap-1">
                       <Square className="w-4 h-4" /> Cancel
+                    </button>
+                  )}
+                  {activeRun.status === 'completed' && (
+                    <button
+                      onClick={() => navigate('/reports')}
+                      className="btn-primary w-full flex items-center justify-center gap-2"
+                    >
+                      <FileText className="w-4 h-4" /> Generate Report
                     </button>
                   )}
                 </div>
