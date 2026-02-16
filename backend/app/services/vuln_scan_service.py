@@ -359,14 +359,18 @@ class VulnScanService:
         except (asyncio.TimeoutError, ConnectionRefusedError, OSError):
             # Try ping as fallback
             try:
-                proc = await asyncio.create_subprocess_exec(
-                    "ping", "-c", "1", "-W", "1", target,
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
+                import subprocess, platform
+                if platform.system().lower() == "windows":
+                    cmd = ["ping", "-n", "1", "-w", "1000", target]
+                else:
+                    cmd = ["ping", "-c", "1", "-W", "1", target]
+                proc = await asyncio.to_thread(
+                    subprocess.run, cmd,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    timeout=3,
                 )
-                await asyncio.wait_for(proc.wait(), timeout=3)
                 return proc.returncode == 0
-            except (asyncio.TimeoutError, OSError):
+            except (subprocess.TimeoutExpired, OSError):
                 return False
 
     def _generate_simulated_findings(self, asset: Asset) -> list[dict]:

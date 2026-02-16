@@ -57,6 +57,8 @@ async def nmap_discover(request: NmapDiscoverRequest, db: AsyncSession = Depends
         raise HTTPException(status_code=400, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {str(e)}")
 
 
 @router.post("/fingerprint")

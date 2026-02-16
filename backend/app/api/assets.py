@@ -27,40 +27,37 @@ async def detect_gateway():
     import re
 
     try:
+        import subprocess
         system = platform.system().lower()
         if system == "linux":
-            proc = await asyncio.create_subprocess_exec(
-                "ip", "route", "show", "default",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            proc = await asyncio.to_thread(
+                subprocess.run, ["ip", "route", "show", "default"],
+                capture_output=True, timeout=5,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
-            output = stdout.decode().strip()
-            # e.g. "default via 192.168.178.1 dev eth0"
+            output = proc.stdout.decode().strip()
             match = re.search(r"default via ([\d.]+)", output)
             if match:
                 gateway = match.group(1)
-                # Assume /24 network from gateway IP
                 parts = gateway.split(".")
                 cidr = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
                 return {"gateway": gateway, "cidr": cidr}
         elif system == "windows":
-            proc = await asyncio.create_subprocess_shell(
-                'powershell -Command "Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Select-Object -First 1 -ExpandProperty NextHop"',
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                ['powershell', '-Command', 'Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Select-Object -First 1 -ExpandProperty NextHop'],
+                capture_output=True, timeout=10,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-            gateway = stdout.decode().strip()
+            gateway = proc.stdout.decode().strip()
             if re.match(r"^\d+\.\d+\.\d+\.\d+$", gateway):
                 parts = gateway.split(".")
                 cidr = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
                 return {"gateway": gateway, "cidr": cidr}
         # Docker / fallback — try ip route
-        proc = await asyncio.create_subprocess_exec(
-            "ip", "route", "show", "default",
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        proc = await asyncio.to_thread(
+            subprocess.run, ["ip", "route", "show", "default"],
+            capture_output=True, timeout=5,
         )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
-        output = stdout.decode().strip()
+        output = proc.stdout.decode().strip()
         match = re.search(r"default via ([\d.]+)", output)
         if match:
             gateway = match.group(1)

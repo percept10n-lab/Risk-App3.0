@@ -105,50 +105,31 @@ class NmapService:
         self, target: str, nmap_args: str, run_id: str | None = None, timeout: int = 600
     ) -> dict:
         """Run nmap as subprocess, streaming stderr to WebSocket and capturing XML from stdout."""
+        import subprocess
         cmd_parts = ["nmap"] + nmap_args.split() + [target, "-oX", "-"]
         logger.info("Running nmap", command=" ".join(cmd_parts), run_id=run_id)
 
-        process = await asyncio.create_subprocess_exec(
-            *cmd_parts,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        xml_chunks = []
-        stderr_lines = []
-
-        async def read_stderr():
-            while True:
-                line = await process.stderr.readline()
-                if not line:
-                    break
-                text = line.decode("utf-8", errors="replace").rstrip()
-                stderr_lines.append(text)
-                if run_id:
-                    await manager.broadcast(run_id, {"type": "nmap_output", "line": text})
-
-        async def read_stdout():
-            while True:
-                chunk = await process.stdout.read(4096)
-                if not chunk:
-                    break
-                xml_chunks.append(chunk)
-
         try:
-            await asyncio.wait_for(
-                asyncio.gather(read_stderr(), read_stdout(), process.wait()),
-                timeout=timeout,
+            proc = await asyncio.to_thread(
+                subprocess.run, cmd_parts,
+                capture_output=True, timeout=timeout,
             )
-        except asyncio.TimeoutError:
-            process.kill()
-            await process.wait()
+        except subprocess.TimeoutExpired:
             raise asyncio.TimeoutError(f"Nmap scan timed out after {timeout}s")
 
-        if process.returncode != 0 and not xml_chunks:
-            error_text = "\n".join(stderr_lines[-10:])
-            raise RuntimeError(f"Nmap exited with code {process.returncode}: {error_text}")
+        xml_bytes = proc.stdout
+        stderr_text = proc.stderr.decode("utf-8", errors="replace")
+        stderr_lines = stderr_text.strip().splitlines()
 
-        xml_bytes = b"".join(xml_chunks)
+        # Stream stderr lines to WebSocket after completion
+        if run_id and stderr_lines:
+            for line in stderr_lines:
+                await manager.broadcast(run_id, {"type": "nmap_output", "line": line})
+
+        if proc.returncode != 0 and not xml_bytes:
+            error_text = "\n".join(stderr_lines[-10:])
+            raise RuntimeError(f"Nmap exited with code {proc.returncode}: {error_text}")
+
         result = self._parse_xml_output(xml_bytes)
 
         # Send the command line used to console

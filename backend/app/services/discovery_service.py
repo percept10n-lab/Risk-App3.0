@@ -2,6 +2,7 @@ import json
 import asyncio
 import ipaddress
 import re
+import subprocess
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -131,25 +132,20 @@ class DiscoveryService:
         if re.search(r"[;&|`$()>\"]", network):
             raise ValueError("Invalid characters in network target")
 
-        # Run nmap subprocess
+        # Run nmap subprocess (use subprocess.run in thread — asyncio subprocess
+        # is not supported on Windows SelectorEventLoop used by uvicorn)
         cmd = ["nmap", "-sS", "--open", "-T4", "--host-timeout", "15s", "-oG", "-", network]
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            proc = await asyncio.to_thread(
+                subprocess.run, cmd,
+                capture_output=True, timeout=timeout,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except subprocess.TimeoutExpired:
             logger.warning("nmap discovery timed out", network=network, timeout=timeout)
-            try:
-                proc.kill()
-            except Exception:
-                pass
             return {"status": "timeout", "hosts": [], "assets_created": 0, "assets_updated": 0}
 
-        raw_output = stdout.decode("utf-8", errors="replace")
-        stderr_text = stderr.decode("utf-8", errors="replace")
+        raw_output = proc.stdout.decode("utf-8", errors="replace")
+        stderr_text = proc.stderr.decode("utf-8", errors="replace")
 
         if proc.returncode != 0 and not raw_output.strip():
             logger.error("nmap failed", returncode=proc.returncode, stderr=stderr_text)
@@ -498,12 +494,11 @@ class DiscoveryService:
                         cmd = ["ping", "-n", "1", "-w", "1000", ip]
                     else:
                         cmd = ["ping", "-c", "1", "-W", "1", ip]
-                    proc = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL,
+                    proc = await asyncio.to_thread(
+                        subprocess.run, cmd,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        timeout=3,
                     )
-                    await asyncio.wait_for(proc.wait(), timeout=3)
                     if proc.returncode == 0:
                         hostname = None
                         try:
@@ -516,7 +511,7 @@ class DiscoveryService:
                         except (asyncio.TimeoutError, Exception):
                             pass
                         results.append({"ip_address": ip, "hostname": hostname})
-                except (asyncio.TimeoutError, OSError):
+                except (asyncio.TimeoutError, subprocess.TimeoutExpired, OSError):
                     pass
 
         hosts = [str(ip) for ip in network.hosts()]
