@@ -33,11 +33,16 @@ export const useRunStore = create<RunState>((set, get) => ({
       const response = await runsApi.list()
       const runs = response.data.items
       set({ runs, loading: false })
-      // Auto-detect active run
+      // Auto-detect active run (running/pending first, then most recent completed)
       const active = runs.find((r: Run) => r.status === 'running' || r.status === 'pending')
       if (active) {
         set({ activeRun: active })
         get().startPolling(active.id)
+      } else if (!get().activeRun) {
+        const lastCompleted = runs.find((r: Run) => r.status === 'completed')
+        if (lastCompleted) {
+          set({ activeRun: lastCompleted })
+        }
       }
     } catch (err: any) {
       set({ error: err.message, loading: false })

@@ -150,31 +150,33 @@ export default function WorkflowPage() {
                     </div>
                   </div>
                 )}
-                <div className="flex gap-2 pt-2">
-                  {activeRun.status === 'running' && (
-                    <button onClick={() => pauseRun(activeRun.id)} className="btn-secondary flex items-center gap-1">
-                      <Pause className="w-4 h-4" /> Pause
-                    </button>
-                  )}
-                  {activeRun.status === 'paused' && (
-                    <button onClick={() => resumeRun(activeRun.id)} className="btn-primary flex items-center gap-1">
-                      <Play className="w-4 h-4" /> Resume
-                    </button>
-                  )}
-                  {['running', 'paused'].includes(activeRun.status) && (
+                {['running', 'paused'].includes(activeRun.status) && (
+                  <div className="flex gap-2 pt-2">
+                    {activeRun.status === 'running' && (
+                      <button onClick={() => pauseRun(activeRun.id)} className="btn-secondary flex items-center gap-1">
+                        <Pause className="w-4 h-4" /> Pause
+                      </button>
+                    )}
+                    {activeRun.status === 'paused' && (
+                      <button onClick={() => resumeRun(activeRun.id)} className="btn-primary flex items-center gap-1">
+                        <Play className="w-4 h-4" /> Resume
+                      </button>
+                    )}
                     <button onClick={() => cancelRun(activeRun.id)} className="btn-danger flex items-center gap-1">
                       <Square className="w-4 h-4" /> Cancel
                     </button>
-                  )}
-                  {activeRun.status === 'completed' && (
+                  </div>
+                )}
+                {activeRun.status === 'completed' && (
+                  <div className="pt-3 border-t border-gray-200">
                     <button
                       onClick={() => navigate('/reports')}
                       className="btn-primary w-full flex items-center justify-center gap-2"
                     >
                       <FileText className="w-4 h-4" /> Generate Report
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-sm text-gray-500">No active run. Enter your subnet and start a new assessment.</p>
