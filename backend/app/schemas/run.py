@@ -24,3 +24,36 @@ class RunResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- Workflow Completion Report schemas ---
+
+class StepDetail(BaseModel):
+    step: str
+    label: str
+    status: str  # completed | failed | skipped
+    items_count: int = 0
+    details: list[dict] = []
+
+
+class ReportSummary(BaseModel):
+    total_assets: int = 0
+    total_findings: int = 0
+    total_threats: int = 0
+    total_risks: int = 0
+    total_mitre_mappings: int = 0
+    total_baselines: int = 0
+    findings_by_severity: dict[str, int] = {}
+    risks_by_level: dict[str, int] = {}
+
+
+class WorkflowReport(BaseModel):
+    run_id: str
+    status: str
+    scope: dict | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    duration_seconds: float | None = None
+    triggered_by: str
+    steps: list[StepDetail] = []
+    summary: ReportSummary = ReportSummary()

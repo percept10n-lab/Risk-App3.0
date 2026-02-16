@@ -128,6 +128,38 @@ export interface Run {
   created_at: string
 }
 
+// Workflow Completion Report
+export interface StepDetail {
+  step: string
+  label: string
+  status: 'completed' | 'failed' | 'skipped'
+  items_count: number
+  details: Record<string, any>[]
+}
+
+export interface ReportSummary {
+  total_assets: number
+  total_findings: number
+  total_threats: number
+  total_risks: number
+  total_mitre_mappings: number
+  total_baselines: number
+  findings_by_severity: Record<string, number>
+  risks_by_level: Record<string, number>
+}
+
+export interface WorkflowReport {
+  run_id: string
+  status: string
+  scope: Record<string, any> | null
+  started_at: string | null
+  completed_at: string | null
+  duration_seconds: number | null
+  triggered_by: string
+  steps: StepDetail[]
+  summary: ReportSummary
+}
+
 // Policy
 export interface Policy {
   id: string
