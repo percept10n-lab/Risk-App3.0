@@ -1,5 +1,7 @@
 import json
 import asyncio
+import ipaddress
+import re
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,6 +17,13 @@ import structlog
 
 logger = structlog.get_logger()
 
+PRIVATE_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("127.0.0.0/8"),
+]
+
 
 class DiscoveryService:
     def __init__(self, db: AsyncSession):
@@ -22,6 +31,186 @@ class DiscoveryService:
         self.asset_service = AssetService(db)
         self.artifact_store = ArtifactStore(db)
         self.audit_trail = AuditTrail(db)
+
+    @staticmethod
+    def _validate_scope(target: str) -> bool:
+        """Validate target is in RFC 1918 private range."""
+        try:
+            net = ipaddress.ip_network(target, strict=False)
+            return any(net.subnet_of(priv) for priv in PRIVATE_NETWORKS)
+        except ValueError:
+            try:
+                ip = ipaddress.ip_address(target)
+                return any(ip in net for net in PRIVATE_NETWORKS)
+            except ValueError:
+                return False
+
+    @staticmethod
+    def _build_exposure_from_ports(ports: list[dict]) -> dict:
+        """Build exposure profile from a list of port dicts."""
+        exposure = {}
+        for p in ports:
+            port = p["port"]
+            if port in (80, 8080, 8000):
+                exposure["admin_ui"] = True
+                exposure["http_exposed"] = True
+            if port in (443, 8443):
+                exposure["https_exposed"] = True
+                exposure["admin_ui"] = True
+            if port == 22:
+                exposure["ssh_exposed"] = True
+            if port == 23:
+                exposure["telnet_exposed"] = True
+            if port == 21:
+                exposure["ftp_exposed"] = True
+            if port == 445 or port == 139:
+                exposure["smb_exposed"] = True
+            if port == 3389:
+                exposure["rdp_exposed"] = True
+            if port == 5900:
+                exposure["vnc_exposed"] = True
+            if port in (3306, 5432, 1433, 6379, 27017):
+                exposure["db_exposed"] = True
+        return exposure
+
+    @staticmethod
+    def _parse_grepable_output(output: str) -> list[dict]:
+        """Parse nmap grepable (-oG) output into host dicts with ports."""
+        hosts = []
+        for line in output.splitlines():
+            if not line.startswith("Host:"):
+                continue
+            if "Ports:" not in line:
+                continue
+
+            # Extract IP and optional hostname
+            # Format: Host: 192.168.178.1 (router.local)\tPorts: ...
+            # or:     Host: 192.168.178.1 ()\tPorts: ...
+            header_part, _, ports_part = line.partition("Ports:")
+            ip_match = re.match(r"Host:\s+([\d.]+)\s+\(([^)]*)\)", header_part)
+            if not ip_match:
+                continue
+
+            ip = ip_match.group(1)
+            hostname = ip_match.group(2).strip() or None
+
+            # Parse ports: 80/open/tcp//http///, 443/open/tcp//https///
+            ports = []
+            port_entries = ports_part.strip().split(",")
+            for entry in port_entries:
+                entry = entry.strip()
+                if not entry:
+                    continue
+                parts = entry.split("/")
+                if len(parts) < 5:
+                    continue
+                try:
+                    port_num = int(parts[0])
+                except ValueError:
+                    continue
+                state = parts[1]
+                if state != "open":
+                    continue
+                proto = parts[2]
+                service = parts[4] if len(parts) > 4 else ""
+                ports.append({"port": port_num, "proto": proto, "service": service})
+
+            if ports:
+                hosts.append({"ip": ip, "hostname": hostname, "ports": ports})
+        return hosts
+
+    async def run_nmap_discovery(self, network: str, timeout: int = 120) -> dict:
+        """Run nmap -sS --open -oG - <network> and return hosts with open ports."""
+        logger.info("Starting nmap discovery", network=network, timeout=timeout)
+
+        # Validate scope
+        if not self._validate_scope(network):
+            raise ValueError(f"Target {network} is not in RFC 1918 private range")
+
+        # Sanitize: reject shell metacharacters
+        if re.search(r"[;&|`$()>\"]", network):
+            raise ValueError("Invalid characters in network target")
+
+        # Run nmap subprocess
+        cmd = ["nmap", "-sS", "--open", "-oG", "-", network]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            logger.warning("nmap discovery timed out", network=network, timeout=timeout)
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            return {"status": "timeout", "hosts": [], "assets_created": 0, "assets_updated": 0}
+
+        raw_output = stdout.decode("utf-8", errors="replace")
+        stderr_text = stderr.decode("utf-8", errors="replace")
+
+        if proc.returncode != 0 and not raw_output.strip():
+            logger.error("nmap failed", returncode=proc.returncode, stderr=stderr_text)
+            raise RuntimeError(f"nmap exited with code {proc.returncode}: {stderr_text[:500]}")
+
+        # Parse grepable output
+        hosts = self._parse_grepable_output(raw_output)
+
+        # Upsert assets
+        created = 0
+        updated = 0
+        for host in hosts:
+            exposure = self._build_exposure_from_ports(host["ports"])
+            asset_data = {
+                "ip_address": host["ip"],
+                "hostname": host["hostname"],
+                "first_seen": datetime.utcnow(),
+                "last_seen": datetime.utcnow(),
+                "exposure": exposure,
+            }
+
+            existing = await self.asset_service.find_by_ip(host["ip"])
+            if existing:
+                updated += 1
+            else:
+                created += 1
+            await self.asset_service.upsert_from_scan(asset_data)
+
+        # Store artifact
+        await self.artifact_store.store(
+            content=raw_output,
+            artifact_type="raw_output",
+            tool_name="nmap_discovery",
+            target=network,
+            command=" ".join(cmd),
+            parameters={"network": network, "timeout": timeout},
+        )
+
+        # Audit trail
+        await self.audit_trail.log(
+            event_type="step_complete",
+            entity_type="discovery",
+            entity_id="manual",
+            actor="system",
+            action="nmap_discovery_complete",
+            new_value={
+                "hosts_found": len(hosts),
+                "assets_created": created,
+                "assets_updated": updated,
+            },
+        )
+
+        await self.db.commit()
+
+        logger.info("nmap discovery complete", hosts=len(hosts), created=created, updated=updated)
+        return {
+            "status": "completed",
+            "hosts": hosts,
+            "assets_created": created,
+            "assets_updated": updated,
+        }
 
     async def run_discovery(self, subnet: str, run_id: str | None = None, timeout: int = 60) -> dict:
         """Run full network discovery and create/update assets."""

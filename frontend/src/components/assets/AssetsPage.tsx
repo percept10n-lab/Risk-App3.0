@@ -17,7 +17,6 @@ export default function AssetsPage() {
   // Discovery modal state
   const [discoveryOpen, setDiscoveryOpen] = useState(false)
   const [discoveryCidr, setDiscoveryCidr] = useState('')
-  const [gatewayLoading, setGatewayLoading] = useState(false)
   const [discoveryLoading, setDiscoveryLoading] = useState(false)
   const [discoveryResult, setDiscoveryResult] = useState<any>(null)
   // Post-discovery workflow
@@ -29,7 +28,6 @@ export default function AssetsPage() {
   // Refresh modal state
   const [refreshOpen, setRefreshOpen] = useState(false)
   const [refreshCidr, setRefreshCidr] = useState('')
-  const [refreshGatewayLoading, setRefreshGatewayLoading] = useState(false)
   const [refreshLoading, setRefreshLoading] = useState(false)
   const [refreshResult, setRefreshResult] = useState<any>(null)
 
@@ -43,19 +41,12 @@ export default function AssetsPage() {
     fetchAssets()
   }, [])
 
-  const openDiscoveryModal = async () => {
+  const openDiscoveryModal = () => {
     setDiscoveryOpen(true)
     setDiscoveryResult(null)
     setThreatResult(null)
     setVulnResult(null)
     setDiscoveryCidr('')
-    setGatewayLoading(true)
-    try {
-      const res = await assetsApi.detectGateway()
-      const data = res.data as any
-      if (data.cidr) setDiscoveryCidr(data.cidr)
-    } catch { /* empty */ }
-    setGatewayLoading(false)
   }
 
   const startDiscovery = async () => {
@@ -65,11 +56,12 @@ export default function AssetsPage() {
     setThreatResult(null)
     setVulnResult(null)
     try {
-      const res = await discoveryApi.discover({ subnet: discoveryCidr })
+      const res = await discoveryApi.nmapDiscover({ network: discoveryCidr })
       setDiscoveryResult(res.data)
       fetchAssets()
     } catch (err: any) {
-      setDiscoveryResult({ status: 'error', error: err.message })
+      const msg = err.response?.data?.detail || err.message
+      setDiscoveryResult({ status: 'error', error: msg })
     }
     setDiscoveryLoading(false)
   }
@@ -99,17 +91,10 @@ export default function AssetsPage() {
   }
 
   // Refresh Assets
-  const openRefreshModal = async () => {
+  const openRefreshModal = () => {
     setRefreshOpen(true)
     setRefreshResult(null)
     setRefreshCidr('')
-    setRefreshGatewayLoading(true)
-    try {
-      const res = await assetsApi.detectGateway()
-      const data = res.data as any
-      if (data.cidr) setRefreshCidr(data.cidr)
-    } catch { /* empty */ }
-    setRefreshGatewayLoading(false)
   }
 
   const startRefresh = async () => {
@@ -117,11 +102,12 @@ export default function AssetsPage() {
     setRefreshLoading(true)
     setRefreshResult(null)
     try {
-      const res = await discoveryApi.discover({ subnet: refreshCidr })
+      const res = await discoveryApi.nmapDiscover({ network: refreshCidr })
       setRefreshResult(res.data)
       fetchAssets()
     } catch (err: any) {
-      setRefreshResult({ status: 'error', error: err.message })
+      const msg = err.response?.data?.detail || err.message
+      setRefreshResult({ status: 'error', error: msg })
     }
     setRefreshLoading(false)
   }
@@ -276,20 +262,22 @@ export default function AssetsPage() {
               Discover Assets
             </h3>
 
-            {/* CIDR Input */}
+            {/* Network Input */}
             <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Target CIDR</label>
-              <div className="flex gap-2">
-                <input
-                  value={discoveryCidr}
-                  onChange={(e) => setDiscoveryCidr(e.target.value)}
-                  className="flex-1 px-3 py-2 border rounded-lg text-sm font-mono"
-                  placeholder="e.g., 192.168.1.0/24"
-                  disabled={discoveryLoading}
-                />
-                {gatewayLoading && <Loader2 className="w-5 h-5 animate-spin text-gray-400 self-center" />}
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Auto-detected from default gateway. Edit if needed.</p>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Network</label>
+              <input
+                value={discoveryCidr}
+                onChange={(e) => setDiscoveryCidr(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                placeholder="IP or CIDR (e.g. 192.168.178.0/24 or 192.168.178.1)"
+                disabled={discoveryLoading}
+              />
+              <p className="text-xs text-gray-400 mt-1">Enter an IP address or CIDR-style network to scan</p>
+              {discoveryCidr && (
+                <div className="mt-2 px-3 py-1.5 bg-gray-900 rounded text-xs text-green-400 font-mono">
+                  $ nmap -sS --open -oG - {discoveryCidr}
+                </div>
+              )}
             </div>
 
             {/* Start button */}
@@ -314,35 +302,52 @@ export default function AssetsPage() {
                   </div>
                 ) : (
                   <>
+                    {/* Host table */}
                     <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                      <p className="text-sm text-green-700 font-medium mb-3">Discovery Complete</p>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-green-700">{discoveryResult.hosts_discovered ?? discoveryResult.total_hosts ?? 0}</p>
-                          <p className="text-xs text-green-600">Hosts Found</p>
+                      <p className="text-sm text-green-700 font-medium mb-3">
+                        {discoveryResult.hosts?.length ?? 0} host(s) found with open ports
+                      </p>
+                      {discoveryResult.hosts && discoveryResult.hosts.length > 0 && (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-green-200">
+                                <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">IP Address</th>
+                                <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">Hostname</th>
+                                <th className="text-left py-1.5 text-green-800 font-semibold">Open Ports</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {discoveryResult.hosts.map((host: any) => (
+                                <tr key={host.ip} className="border-b border-green-100 last:border-0">
+                                  <td className="py-1.5 pr-3 font-mono">{host.ip}</td>
+                                  <td className="py-1.5 pr-3 text-gray-600">{host.hostname || '-'}</td>
+                                  <td className="py-1.5">
+                                    <div className="flex flex-wrap gap-1">
+                                      {host.ports?.map((p: any) => (
+                                        <span key={p.port} className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-mono">
+                                          {p.port}/{p.proto}{p.service ? ` ${p.service}` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
+                      )}
+                      {/* Stats */}
+                      <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-green-200">
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-blue-700">{discoveryResult.assets_created ?? 0}</p>
+                          <p className="text-xl font-bold text-blue-700">{discoveryResult.assets_created ?? 0}</p>
                           <p className="text-xs text-blue-600">Assets Created</p>
                         </div>
                         <div className="text-center">
-                          <p className="text-2xl font-bold text-gray-700">{discoveryResult.assets_updated ?? 0}</p>
+                          <p className="text-xl font-bold text-gray-700">{discoveryResult.assets_updated ?? 0}</p>
                           <p className="text-xs text-gray-600">Assets Updated</p>
                         </div>
                       </div>
-                      {discoveryResult.hosts && discoveryResult.hosts.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-green-200">
-                          <p className="text-xs font-medium text-green-700 mb-1">Discovered IPs:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {discoveryResult.hosts.slice(0, 20).map((ip: string) => (
-                              <span key={ip} className="font-mono text-xs bg-green-100 px-1.5 py-0.5 rounded">{ip}</span>
-                            ))}
-                            {discoveryResult.hosts.length > 20 && (
-                              <span className="text-xs text-green-600">+{discoveryResult.hosts.length - 20} more</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                     {/* Next Steps Workflow */}
@@ -417,18 +422,20 @@ export default function AssetsPage() {
             </p>
 
             <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-700 mb-1">Target CIDR</label>
-              <div className="flex gap-2">
-                <input
-                  value={refreshCidr}
-                  onChange={(e) => setRefreshCidr(e.target.value)}
-                  className="flex-1 px-3 py-2 border rounded-lg text-sm font-mono"
-                  placeholder="e.g., 192.168.1.0/24"
-                  disabled={refreshLoading}
-                />
-                {refreshGatewayLoading && <Loader2 className="w-5 h-5 animate-spin text-gray-400 self-center" />}
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Auto-detected from default gateway. Edit if needed.</p>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Network</label>
+              <input
+                value={refreshCidr}
+                onChange={(e) => setRefreshCidr(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+                placeholder="IP or CIDR (e.g. 192.168.178.0/24 or 192.168.178.1)"
+                disabled={refreshLoading}
+              />
+              <p className="text-xs text-gray-400 mt-1">Enter an IP address or CIDR-style network to scan</p>
+              {refreshCidr && (
+                <div className="mt-2 px-3 py-1.5 bg-gray-900 rounded text-xs text-green-400 font-mono">
+                  $ nmap -sS --open -oG - {refreshCidr}
+                </div>
+              )}
             </div>
 
             {!refreshResult && (
@@ -451,18 +458,46 @@ export default function AssetsPage() {
                   </div>
                 ) : (
                   <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                    <p className="text-sm text-green-700 font-medium mb-3">Refresh Complete</p>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="text-center">
-                        <p className="text-2xl font-bold text-green-700">{refreshResult.hosts_discovered ?? refreshResult.total_hosts ?? 0}</p>
-                        <p className="text-xs text-green-600">Hosts Found</p>
+                    <p className="text-sm text-green-700 font-medium mb-3">
+                      {refreshResult.hosts?.length ?? 0} host(s) found with open ports
+                    </p>
+                    {refreshResult.hosts && refreshResult.hosts.length > 0 && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-green-200">
+                              <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">IP Address</th>
+                              <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">Hostname</th>
+                              <th className="text-left py-1.5 text-green-800 font-semibold">Open Ports</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {refreshResult.hosts.map((host: any) => (
+                              <tr key={host.ip} className="border-b border-green-100 last:border-0">
+                                <td className="py-1.5 pr-3 font-mono">{host.ip}</td>
+                                <td className="py-1.5 pr-3 text-gray-600">{host.hostname || '-'}</td>
+                                <td className="py-1.5">
+                                  <div className="flex flex-wrap gap-1">
+                                    {host.ports?.map((p: any) => (
+                                      <span key={p.port} className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-mono">
+                                        {p.port}/{p.proto}{p.service ? ` ${p.service}` : ''}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-green-200">
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-blue-700">{refreshResult.assets_created ?? 0}</p>
+                        <p className="text-xl font-bold text-blue-700">{refreshResult.assets_created ?? 0}</p>
                         <p className="text-xs text-blue-600">New Assets</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-gray-700">{refreshResult.assets_updated ?? 0}</p>
+                        <p className="text-xl font-bold text-gray-700">{refreshResult.assets_updated ?? 0}</p>
                         <p className="text-xs text-gray-600">Updated</p>
                       </div>
                     </div>

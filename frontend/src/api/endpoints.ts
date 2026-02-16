@@ -18,6 +18,7 @@ export const assetsApi = {
 // Discovery
 export const discoveryApi = {
   discover: (data: { subnet: string; timeout?: number }) => api.post('/scan/discover', data),
+  nmapDiscover: (data: { network: string; timeout?: number }) => api.post('/scan/nmap-discover', data),
 }
 
 // Findings

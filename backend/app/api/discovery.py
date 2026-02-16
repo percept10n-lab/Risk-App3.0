@@ -21,6 +21,11 @@ class DiscoveryRequest(BaseModel):
     run_id: str | None = None
 
 
+class NmapDiscoverRequest(BaseModel):
+    network: str
+    timeout: int = 120
+
+
 class FingerprintRequest(BaseModel):
     asset_id: str | None = None
     run_id: str | None = None
@@ -36,6 +41,22 @@ async def run_discovery(request: DiscoveryRequest, db: AsyncSession = Depends(ge
         timeout=request.timeout,
     )
     return result
+
+
+@router.post("/nmap-discover")
+async def nmap_discover(request: NmapDiscoverRequest, db: AsyncSession = Depends(get_db)):
+    """Run nmap SYN scan discovery returning hosts with open ports."""
+    try:
+        service = DiscoveryService(db)
+        result = await service.run_nmap_discovery(
+            network=request.network,
+            timeout=request.timeout,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/fingerprint")
