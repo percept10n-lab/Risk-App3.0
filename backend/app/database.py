@@ -19,7 +19,7 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
     """Enable WAL mode for better concurrency with SQLite."""
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.close()
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
