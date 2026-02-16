@@ -4,7 +4,13 @@ import PageHeader from '../common/PageHeader'
 import Badge from '../common/Badge'
 import { useRunStore } from '../../stores/runStore'
 import type { AuditEvent } from '../../types'
-import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle, FileText, Clock, XCircle, ArrowRight, Activity } from 'lucide-react'
+import {
+  Play, Pause, Square, CheckCircle2, Circle, Loader2,
+  AlertTriangle, FileText, Clock, XCircle, ArrowRight,
+  Activity, Terminal, ChevronRight
+} from 'lucide-react'
+
+/* ─── constants ─── */
 
 const STEPS = [
   { key: 'discovery', label: 'Asset Discovery', description: 'Scan network for devices' },
@@ -17,17 +23,12 @@ const STEPS = [
   { key: 'baseline', label: 'Baseline Snapshot', description: 'Create drift detection baseline' },
 ]
 
-const STEP_LABELS: Record<string, string> = {
-  pipeline: 'Pipeline',
-  discovery: 'Asset Discovery',
-  fingerprinting: 'Fingerprinting',
-  threat_modeling: 'Threat Modeling',
-  vuln_scanning: 'Vulnerability Scanning',
-  exploit_analysis: 'Exploit Analysis',
-  mitre_mapping: 'MITRE Mapping',
-  risk_analysis: 'Risk Analysis',
-  baseline: 'Baseline Snapshot',
-}
+const STEP_LABELS: Record<string, string> = Object.fromEntries([
+  ['pipeline', 'Pipeline'],
+  ...STEPS.map(s => [s.key, s.label]),
+])
+
+/* ─── helpers ─── */
 
 function formatSummary(event: AuditEvent): string | null {
   const v = event.new_value
@@ -35,34 +36,37 @@ function formatSummary(event: AuditEvent): string | null {
   const step = v.step as string
   const action = event.action
 
-  if (action === 'started') {
-    if (step === 'pipeline') return `Target: ${v.subnet || 'network'}`
-    return null
-  }
+  if (action === 'started' && step === 'pipeline') return `Scanning ${v.subnet || 'network'}`
+  if (action === 'started') return 'Running...'
   if (action === 'failed') return `Error: ${v.error || 'unknown'}`
   if (action !== 'completed') return null
 
-  if (step === 'pipeline') return `${v.total_steps} steps completed`
-  if (step === 'discovery') return `${v.assets_found ?? '?'} assets found on ${v.subnet || 'network'}`
-  if (step === 'fingerprinting') return `${v.assets_fingerprinted ?? '?'} assets fingerprinted`
-  if (step === 'threat_modeling') return `${v.threats_identified ?? '?'} threats identified`
-  if (step === 'vuln_scanning') return `${v.findings_found ?? '?'} findings discovered`
-  if (step === 'exploit_analysis') return `${v.findings_enriched ?? '?'} findings enriched`
-  if (step === 'mitre_mapping') return `${v.techniques_mapped ?? '?'} techniques mapped`
-  if (step === 'risk_analysis') return `${v.risks_assessed ?? '?'} risks assessed`
+  if (step === 'pipeline') return `All ${v.total_steps} steps completed successfully`
+  if (step === 'discovery') return `Found ${v.assets_found ?? '?'} assets on ${v.subnet || 'network'}`
+  if (step === 'fingerprinting') return `Fingerprinted ${v.assets_fingerprinted ?? '?'} assets`
+  if (step === 'threat_modeling') return `Identified ${v.threats_identified ?? '?'} threats`
+  if (step === 'vuln_scanning') return `Discovered ${v.findings_found ?? '?'} findings`
+  if (step === 'exploit_analysis') return `Enriched ${v.findings_enriched ?? '?'} findings`
+  if (step === 'mitre_mapping') return `Mapped ${v.techniques_mapped ?? '?'} ATT&CK techniques`
+  if (step === 'risk_analysis') return `Assessed ${v.risks_assessed ?? '?'} risks`
   if (step === 'baseline') return 'Baseline snapshot created'
   return null
 }
 
 function LogIcon({ action }: { action: string }) {
-  if (action === 'completed') return <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0 mt-0.5" />
-  if (action === 'started') return <ArrowRight className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
-  if (action === 'failed') return <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />
-  return <Circle className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
+  if (action === 'completed') return <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+  if (action === 'started') return <ChevronRight className="w-4 h-4 text-blue-500 shrink-0" />
+  if (action === 'failed') return <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+  return <Circle className="w-4 h-4 text-gray-400 shrink-0" />
 }
 
+/* ─── main component ─── */
+
 export default function WorkflowPage() {
-  const { runs, activeRun, actionLog, loading, polling, error, fetchRuns, createRun, pauseRun, resumeRun, cancelRun, stopPolling } = useRunStore()
+  const {
+    runs, activeRun, actionLog, loading, polling, error,
+    fetchRuns, createRun, pauseRun, resumeRun, cancelRun, stopPolling,
+  } = useRunStore()
   const [subnet, setSubnet] = useState('192.168.178.0/24')
   const navigate = useNavigate()
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -72,7 +76,6 @@ export default function WorkflowPage() {
     return () => { stopPolling() }
   }, [])
 
-  // Auto-scroll action log to bottom on new entries
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [actionLog.length])
@@ -90,6 +93,8 @@ export default function WorkflowPage() {
   }
 
   const isRunning = activeRun && ['running', 'pending'].includes(activeRun.status)
+  const completedCount = activeRun?.steps_completed?.length || 0
+  const progressPct = (completedCount / STEPS.length) * 100
 
   return (
     <div>
@@ -111,7 +116,8 @@ export default function WorkflowPage() {
               disabled={loading || !!isRunning}
               className="btn-primary flex items-center gap-2"
             >
-              <Play className="w-4 h-4" /> New Assessment Run
+              <Play className="w-4 h-4" />
+              {loading ? 'Starting...' : 'New Assessment Run'}
             </button>
           </div>
         }
@@ -123,154 +129,171 @@ export default function WorkflowPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Workflow Steps */}
-        <div className="lg:col-span-2">
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="font-semibold">Workflow Steps</h3>
-              {polling && (
-                <span className="text-xs text-brand-500 flex items-center gap-1">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Live updating
-                </span>
-              )}
-            </div>
-            <div className="space-y-4">
-              {STEPS.map((step, idx) => {
-                const status = getStepStatus(step.key)
-                return (
-                  <div key={step.key} className="flex items-start gap-4">
-                    <div className="flex flex-col items-center">
-                      {status === 'completed' ? (
-                        <CheckCircle2 className="w-8 h-8 text-green-500" />
-                      ) : status === 'active' ? (
-                        <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
-                      ) : status === 'failed' ? (
-                        <AlertTriangle className="w-8 h-8 text-red-500" />
-                      ) : (
-                        <Circle className="w-8 h-8 text-gray-300" />
-                      )}
-                      {idx < STEPS.length - 1 && (
-                        <div className={`w-0.5 h-8 mt-1 ${status === 'completed' ? 'bg-green-300' : 'bg-gray-200'}`} />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-4">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium">{step.label}</p>
-                        {status === 'active' && <Badge variant="info">Running</Badge>}
-                        {status === 'completed' && <Badge variant="success">Completed</Badge>}
-                        {status === 'failed' && <Badge variant="critical">Failed</Badge>}
-                      </div>
-                      <p className="text-sm text-gray-500 mt-0.5">{step.description}</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Run Controls + Action Log */}
-        <div className="space-y-4">
-          {/* Run Controls */}
-          <div className="card p-6">
-            <h3 className="font-semibold mb-4">Run Controls</h3>
-            {activeRun ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Run ID</span>
-                  <span className="font-mono text-sm">{activeRun.id.slice(0, 8)}...</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">Status</span>
-                  <Badge variant={
-                    activeRun.status === 'completed' ? 'success' :
-                    activeRun.status === 'failed' ? 'critical' :
-                    activeRun.status === 'running' ? 'info' : 'info'
-                  }>
-                    {activeRun.status}
-                  </Badge>
-                </div>
-                {activeRun.steps_completed && activeRun.steps_completed.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-gray-500">Progress</span>
-                      <span className="text-sm font-medium">{activeRun.steps_completed.length} / {STEPS.length}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-brand-500 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${(activeRun.steps_completed.length / STEPS.length) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                )}
-                {['running', 'paused'].includes(activeRun.status) && (
-                  <div className="flex gap-2 pt-1">
-                    {activeRun.status === 'running' && (
-                      <button onClick={() => pauseRun(activeRun.id)} className="btn-secondary flex items-center gap-1 text-sm">
-                        <Pause className="w-3.5 h-3.5" /> Pause
-                      </button>
-                    )}
-                    {activeRun.status === 'paused' && (
-                      <button onClick={() => resumeRun(activeRun.id)} className="btn-primary flex items-center gap-1 text-sm">
-                        <Play className="w-3.5 h-3.5" /> Resume
-                      </button>
-                    )}
-                    <button onClick={() => cancelRun(activeRun.id)} className="btn-danger flex items-center gap-1 text-sm">
-                      <Square className="w-3.5 h-3.5" /> Cancel
-                    </button>
-                  </div>
-                )}
-                {activeRun.status === 'completed' && (
-                  <button
-                    onClick={() => navigate('/reports')}
-                    className="btn-primary w-full flex items-center justify-center gap-2 text-sm mt-1"
-                  >
-                    <FileText className="w-4 h-4" /> Generate Report
-                  </button>
-                )}
+      {/* ── Status bar ── */}
+      {activeRun && (
+        <div className="card p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Run</span>
+                <span className="font-mono text-sm font-medium">{activeRun.id.slice(0, 8)}</span>
               </div>
-            ) : (
-              <p className="text-sm text-gray-500">No active run. Enter your subnet and start a new assessment.</p>
-            )}
-          </div>
-
-          {/* Action Log */}
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold flex items-center gap-2">
-                <Activity className="w-4 h-4" /> Action Log
-              </h3>
+              <Badge variant={
+                activeRun.status === 'completed' ? 'success' :
+                activeRun.status === 'failed' ? 'critical' :
+                activeRun.status === 'running' ? 'info' : 'info'
+              }>
+                {activeRun.status === 'running' && <Loader2 className="w-3 h-3 animate-spin mr-1 inline" />}
+                {activeRun.status}
+              </Badge>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">{completedCount}/{STEPS.length} steps</span>
+                <div className="w-32 bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-brand-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${progressPct}%` }}
+                  />
+                </div>
+              </div>
               {polling && (
                 <span className="text-xs text-brand-500 flex items-center gap-1">
                   <Loader2 className="w-3 h-3 animate-spin" /> Live
                 </span>
               )}
             </div>
-            <div className="max-h-[480px] overflow-y-auto space-y-0">
-              {actionLog.length === 0 ? (
-                <div className="text-center py-8">
-                  <Activity className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">
-                    {activeRun ? 'Waiting for step events...' : 'Start a run to see the action log'}
-                  </p>
+            <div className="flex items-center gap-2">
+              {activeRun.status === 'running' && (
+                <button onClick={() => pauseRun(activeRun.id)} className="btn-secondary flex items-center gap-1 text-sm py-1.5 px-3">
+                  <Pause className="w-3.5 h-3.5" /> Pause
+                </button>
+              )}
+              {activeRun.status === 'paused' && (
+                <button onClick={() => resumeRun(activeRun.id)} className="btn-primary flex items-center gap-1 text-sm py-1.5 px-3">
+                  <Play className="w-3.5 h-3.5" /> Resume
+                </button>
+              )}
+              {['running', 'paused'].includes(activeRun.status) && (
+                <button onClick={() => cancelRun(activeRun.id)} className="btn-danger flex items-center gap-1 text-sm py-1.5 px-3">
+                  <Square className="w-3.5 h-3.5" /> Cancel
+                </button>
+              )}
+              {activeRun.status === 'completed' && (
+                <button
+                  onClick={() => navigate('/reports')}
+                  className="btn-primary flex items-center gap-2 text-sm py-1.5 px-4"
+                >
+                  <FileText className="w-4 h-4" /> Generate Report
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Main two-panel layout ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {/* ── Left: Workflow Steps ── */}
+        <div className="card p-6">
+          <h3 className="font-semibold mb-6">Workflow Steps</h3>
+          <div className="space-y-1">
+            {STEPS.map((step, idx) => {
+              const status = getStepStatus(step.key)
+              return (
+                <div key={step.key} className="flex items-start gap-3">
+                  <div className="flex flex-col items-center">
+                    {status === 'completed' ? (
+                      <CheckCircle2 className="w-7 h-7 text-green-500" />
+                    ) : status === 'active' ? (
+                      <Loader2 className="w-7 h-7 text-brand-500 animate-spin" />
+                    ) : status === 'failed' ? (
+                      <AlertTriangle className="w-7 h-7 text-red-500" />
+                    ) : (
+                      <Circle className="w-7 h-7 text-gray-300" />
+                    )}
+                    {idx < STEPS.length - 1 && (
+                      <div className={`w-0.5 h-6 mt-1 ${status === 'completed' ? 'bg-green-300' : 'bg-gray-200'}`} />
+                    )}
+                  </div>
+                  <div className="flex-1 pt-0.5 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{step.label}</span>
+                      {status === 'active' && <Badge variant="info">Running</Badge>}
+                      {status === 'completed' && <Badge variant="success">Done</Badge>}
+                      {status === 'failed' && <Badge variant="critical">Failed</Badge>}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{step.description}</p>
+                  </div>
                 </div>
-              ) : (
-                actionLog.map((event, idx) => {
+              )
+            })}
+          </div>
+
+          {/* Recent Runs */}
+          {runs.length > 0 && (
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-600 mb-3">Recent Runs</h4>
+              <div className="space-y-2">
+                {runs.slice(0, 4).map((run) => (
+                  <div key={run.id} className="flex items-center justify-between py-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-gray-500">{run.id.slice(0, 8)}</span>
+                      <span className="text-xs text-gray-400">{run.triggered_by}</span>
+                    </div>
+                    <Badge variant={run.status === 'completed' ? 'success' : run.status === 'failed' ? 'critical' : 'info'}>
+                      {run.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Right: Action Log ── */}
+        <div className="card p-6 flex flex-col" style={{ minHeight: '500px' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Terminal className="w-4 h-4" /> Action Log
+            </h3>
+            {polling && (
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" /> Live
+              </span>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto bg-gray-50 rounded-lg border border-gray-200 p-3">
+            {actionLog.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-gray-400 py-16">
+                <Activity className="w-10 h-10 mb-3 opacity-40" />
+                <p className="text-sm font-medium">
+                  {isRunning ? 'Waiting for step events...' : 'No activity yet'}
+                </p>
+                <p className="text-xs mt-1">
+                  {activeRun ? 'Events will appear here as steps execute' : 'Start an assessment run to see the action log'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-0">
+                {actionLog.map((event, idx) => {
                   const stepName = event.new_value?.step as string || 'unknown'
                   const label = STEP_LABELS[stepName] || stepName
                   const summary = formatSummary(event)
                   const time = new Date(event.timestamp).toLocaleTimeString()
-                  const isLast = idx === actionLog.length - 1
 
                   return (
-                    <div key={event.id} className={`flex gap-3 py-2 ${idx > 0 ? 'border-t border-gray-100' : ''}`}>
+                    <div
+                      key={event.id}
+                      className={`flex gap-3 items-start py-2.5 px-2 rounded ${
+                        idx % 2 === 0 ? 'bg-white' : ''
+                      }`}
+                    >
                       <LogIcon action={event.action} />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium truncate">{label}</span>
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">{label}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                             event.action === 'completed' ? 'bg-green-100 text-green-700' :
                             event.action === 'started' ? 'bg-blue-100 text-blue-700' :
                             event.action === 'failed' ? 'bg-red-100 text-red-700' :
@@ -280,38 +303,16 @@ export default function WorkflowPage() {
                           </span>
                         </div>
                         {summary && (
-                          <p className="text-xs text-gray-500 mt-0.5">{summary}</p>
+                          <p className="text-xs text-gray-600 mt-0.5">{summary}</p>
                         )}
-                        <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> {time}
-                        </p>
                       </div>
+                      <span className="text-xs text-gray-400 whitespace-nowrap flex items-center gap-1 shrink-0">
+                        <Clock className="w-3 h-3" /> {time}
+                      </span>
                     </div>
                   )
-                })
-              )}
-              <div ref={logEndRef} />
-            </div>
-          </div>
-
-          {/* Recent Runs */}
-          <div className="card p-6">
-            <h3 className="font-semibold mb-4">Recent Runs</h3>
-            {runs.length === 0 ? (
-              <p className="text-sm text-gray-500">No previous runs</p>
-            ) : (
-              <div className="space-y-2">
-                {runs.slice(0, 5).map((run) => (
-                  <div key={run.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-gray-50">
-                    <div>
-                      <p className="text-sm font-mono">{run.id.slice(0, 8)}</p>
-                      <p className="text-xs text-gray-500">{run.triggered_by}</p>
-                    </div>
-                    <Badge variant={run.status === 'completed' ? 'success' : run.status === 'failed' ? 'critical' : 'info'}>
-                      {run.status}
-                    </Badge>
-                  </div>
-                ))}
+                })}
+                <div ref={logEndRef} />
               </div>
             )}
           </div>
