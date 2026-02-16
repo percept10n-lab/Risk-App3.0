@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Run } from '../types'
+import type { Run, WorkflowReport } from '../types'
 import { runsApi } from '../api/endpoints'
 
 interface RunState {
@@ -8,12 +8,16 @@ interface RunState {
   loading: boolean
   error: string | null
   polling: boolean
+  report: WorkflowReport | null
+  reportLoading: boolean
   fetchRuns: () => Promise<void>
   fetchRun: (id: string) => Promise<void>
   createRun: (data?: any) => Promise<Run | null>
   pauseRun: (id: string) => Promise<void>
   resumeRun: (id: string) => Promise<void>
   cancelRun: (id: string) => Promise<void>
+  fetchReport: (runId: string) => Promise<void>
+  clearReport: () => void
   startPolling: (runId: string) => void
   stopPolling: () => void
 }
@@ -26,6 +30,8 @@ export const useRunStore = create<RunState>((set, get) => ({
   loading: false,
   error: null,
   polling: false,
+  report: null,
+  reportLoading: false,
 
   fetchRuns: async () => {
     set({ loading: true, error: null })
@@ -59,7 +65,7 @@ export const useRunStore = create<RunState>((set, get) => ({
   },
 
   createRun: async (data?: any) => {
-    set({ loading: true, error: null })
+    set({ loading: true, error: null, report: null })
     try {
       const response = await runsApi.create(data)
       const run = response.data
@@ -99,6 +105,20 @@ export const useRunStore = create<RunState>((set, get) => ({
     } catch (err: any) {
       set({ error: err.message })
     }
+  },
+
+  fetchReport: async (runId: string) => {
+    set({ reportLoading: true })
+    try {
+      const response = await runsApi.report(runId)
+      set({ report: response.data, reportLoading: false })
+    } catch (err: any) {
+      set({ error: err.message, reportLoading: false })
+    }
+  },
+
+  clearReport: () => {
+    set({ report: null })
   },
 
   startPolling: (runId: string) => {

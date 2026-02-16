@@ -80,6 +80,7 @@ export const runsApi = {
   resume: (id: string) => api.post(`/runs/${id}/resume`),
   cancel: (id: string) => api.post(`/runs/${id}/cancel`),
   executeStep: (stepName: string) => api.post(`/runs/step/${stepName}`),
+  report: (id: string) => api.get(`/runs/${id}/report`),
 }
 
 // Reports

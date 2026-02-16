@@ -6,8 +6,15 @@ from sqlalchemy import select, func as sa_func
 
 from app.database import get_db, async_session
 from app.models.run import Run
+from app.models.asset import Asset
+from app.models.finding import Finding
+from app.models.threat import Threat
+from app.models.risk import Risk
+from app.models.mitre_mapping import MitreMapping
+from app.models.baseline import Baseline
+from app.models.artifact import Artifact
 from app.models.audit_event import AuditEvent
-from app.schemas.run import RunCreate, RunResponse
+from app.schemas.run import RunCreate, RunResponse, WorkflowReport, StepDetail, ReportSummary
 from app.schemas.common import PaginatedResponse
 
 import structlog
@@ -238,6 +245,209 @@ async def get_run(run_id: str, db: AsyncSession = Depends(get_db)):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     return run
+
+
+STEP_LABELS = {
+    "discovery": "Asset Discovery",
+    "fingerprinting": "Fingerprinting",
+    "threat_modeling": "Threat Modeling",
+    "vuln_scanning": "Vulnerability Scanning",
+    "exploit_analysis": "Exploit Analysis",
+    "mitre_mapping": "MITRE Mapping",
+    "risk_analysis": "Risk Analysis",
+    "baseline": "Baseline Snapshot",
+}
+
+
+@router.get("/{run_id}/report", response_model=WorkflowReport)
+async def get_run_report(run_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate a completion report for a finished workflow run."""
+    result = await db.execute(select(Run).where(Run.id == run_id))
+    run = result.scalar_one_or_none()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    steps_completed = run.steps_completed or []
+
+    # --- Gather data produced by this run ---
+
+    # Assets: discovered via findings linked to this run
+    findings_result = await db.execute(select(Finding).where(Finding.run_id == run_id))
+    findings = findings_result.scalars().all()
+
+    asset_ids = list({f.asset_id for f in findings})
+    assets = []
+    if asset_ids:
+        assets_result = await db.execute(select(Asset).where(Asset.id.in_(asset_ids)))
+        assets = assets_result.scalars().all()
+
+    # Threats: query all threats whose linked_finding_ids overlap with this run's findings
+    finding_ids = [f.id for f in findings]
+    all_threats_result = await db.execute(select(Threat))
+    all_threats = all_threats_result.scalars().all()
+    threats = [
+        t for t in all_threats
+        if any(fid in (t.linked_finding_ids or []) for fid in finding_ids)
+    ] if finding_ids else []
+
+    # Risks: linked via finding_id
+    risks = []
+    if finding_ids:
+        risks_result = await db.execute(select(Risk).where(Risk.finding_id.in_(finding_ids)))
+        risks = risks_result.scalars().all()
+
+    # MITRE Mappings: linked via finding_id
+    mitre_mappings = []
+    if finding_ids:
+        mitre_result = await db.execute(select(MitreMapping).where(MitreMapping.finding_id.in_(finding_ids)))
+        mitre_mappings = mitre_result.scalars().all()
+
+    # Baselines
+    baselines_result = await db.execute(select(Baseline).where(Baseline.created_from_run_id == run_id))
+    baselines = baselines_result.scalars().all()
+
+    # Artifacts
+    artifacts_result = await db.execute(select(Artifact).where(Artifact.run_id == run_id))
+    artifacts = artifacts_result.scalars().all()
+
+    # --- Build per-step details ---
+    step_details: list[StepDetail] = []
+
+    for step_key in PIPELINE_STEPS:
+        if step_key in steps_completed:
+            status = "completed"
+        elif run.status == "failed" and run.current_step == step_key:
+            status = "failed"
+        elif step_key not in steps_completed:
+            status = "skipped"
+        else:
+            status = "skipped"
+
+        items_count = 0
+        details: list[dict] = []
+
+        if step_key == "discovery":
+            items_count = len(assets)
+            for a in assets[:20]:
+                details.append({
+                    "ip": a.ip_address,
+                    "hostname": a.hostname or "—",
+                    "type": a.asset_type,
+                    "zone": a.zone,
+                })
+
+        elif step_key == "fingerprinting":
+            fingerprinted = [a for a in assets if a.os_guess or a.vendor]
+            items_count = len(fingerprinted)
+            for a in fingerprinted[:20]:
+                details.append({
+                    "ip": a.ip_address,
+                    "os": a.os_guess or "—",
+                    "vendor": a.vendor or "—",
+                })
+
+        elif step_key == "threat_modeling":
+            items_count = len(threats)
+            for t in threats[:20]:
+                details.append({
+                    "title": t.title,
+                    "type": t.threat_type,
+                    "confidence": t.confidence,
+                })
+
+        elif step_key == "vuln_scanning":
+            items_count = len(findings)
+            for f in findings[:20]:
+                details.append({
+                    "title": f.title,
+                    "severity": f.severity,
+                    "category": f.category,
+                    "asset_ip": next((a.ip_address for a in assets if a.id == f.asset_id), "—"),
+                })
+
+        elif step_key == "exploit_analysis":
+            enriched = [f for f in findings if f.exploitability_score is not None]
+            items_count = len(enriched)
+            for f in enriched[:20]:
+                details.append({
+                    "title": f.title,
+                    "exploitability_score": f.exploitability_score,
+                    "severity": f.severity,
+                })
+
+        elif step_key == "mitre_mapping":
+            items_count = len(mitre_mappings)
+            for m in mitre_mappings[:20]:
+                details.append({
+                    "technique_id": m.technique_id,
+                    "technique_name": m.technique_name,
+                    "tactic": m.tactic,
+                    "confidence": m.confidence,
+                })
+
+        elif step_key == "risk_analysis":
+            items_count = len(risks)
+            for r in risks[:20]:
+                details.append({
+                    "scenario": r.scenario[:120] if r.scenario else "—",
+                    "risk_level": r.risk_level,
+                    "likelihood": r.likelihood,
+                    "impact": r.impact,
+                })
+
+        elif step_key == "baseline":
+            items_count = len(baselines)
+            for b in baselines[:20]:
+                details.append({
+                    "zone": b.zone,
+                    "type": b.baseline_type,
+                    "created_at": b.created_at.isoformat() if b.created_at else "—",
+                })
+
+        step_details.append(StepDetail(
+            step=step_key,
+            label=STEP_LABELS.get(step_key, step_key),
+            status=status,
+            items_count=items_count,
+            details=details,
+        ))
+
+    # --- Build summary ---
+    findings_by_severity: dict[str, int] = {}
+    for f in findings:
+        findings_by_severity[f.severity] = findings_by_severity.get(f.severity, 0) + 1
+
+    risks_by_level: dict[str, int] = {}
+    for r in risks:
+        risks_by_level[r.risk_level] = risks_by_level.get(r.risk_level, 0) + 1
+
+    summary = ReportSummary(
+        total_assets=len(assets),
+        total_findings=len(findings),
+        total_threats=len(threats),
+        total_risks=len(risks),
+        total_mitre_mappings=len(mitre_mappings),
+        total_baselines=len(baselines),
+        findings_by_severity=findings_by_severity,
+        risks_by_level=risks_by_level,
+    )
+
+    # Duration
+    duration = None
+    if run.started_at and run.completed_at:
+        duration = (run.completed_at - run.started_at).total_seconds()
+
+    return WorkflowReport(
+        run_id=run.id,
+        status=run.status,
+        scope=run.scope,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        duration_seconds=duration,
+        triggered_by=run.triggered_by,
+        steps=step_details,
+        summary=summary,
+    )
 
 
 @router.post("/{run_id}/pause")
