@@ -82,6 +82,11 @@ export const runsApi = {
   executeStep: (stepName: string) => api.post(`/runs/step/${stepName}`),
 }
 
+// Audit
+export const auditApi = {
+  trail: (runId: string) => api.get(`/audit/trail/${runId}`),
+}
+
 // Reports
 export const reportsApi = {
   summary: () => api.get('/reports/summary'),

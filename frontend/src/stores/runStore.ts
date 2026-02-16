@@ -1,15 +1,17 @@
 import { create } from 'zustand'
-import type { Run } from '../types'
-import { runsApi } from '../api/endpoints'
+import type { Run, AuditEvent } from '../types'
+import { runsApi, auditApi } from '../api/endpoints'
 
 interface RunState {
   runs: Run[]
   activeRun: Run | null
+  actionLog: AuditEvent[]
   loading: boolean
   error: string | null
   polling: boolean
   fetchRuns: () => Promise<void>
   fetchRun: (id: string) => Promise<void>
+  fetchActionLog: (runId: string) => Promise<void>
   createRun: (data?: any) => Promise<Run | null>
   pauseRun: (id: string) => Promise<void>
   resumeRun: (id: string) => Promise<void>
@@ -23,6 +25,7 @@ let pollInterval: ReturnType<typeof setInterval> | null = null
 export const useRunStore = create<RunState>((set, get) => ({
   runs: [],
   activeRun: null,
+  actionLog: [],
   loading: false,
   error: null,
   polling: false,
@@ -42,6 +45,7 @@ export const useRunStore = create<RunState>((set, get) => ({
         const lastCompleted = runs.find((r: Run) => r.status === 'completed')
         if (lastCompleted) {
           set({ activeRun: lastCompleted })
+          get().fetchActionLog(lastCompleted.id)
         }
       }
     } catch (err: any) {
@@ -53,6 +57,8 @@ export const useRunStore = create<RunState>((set, get) => ({
     try {
       const response = await runsApi.get(id)
       set({ activeRun: response.data })
+      // Also fetch action log
+      get().fetchActionLog(id)
       // Stop polling if run is finished
       if (['completed', 'failed', 'cancelled'].includes(response.data.status)) {
         get().stopPolling()
@@ -63,8 +69,20 @@ export const useRunStore = create<RunState>((set, get) => ({
     }
   },
 
+  fetchActionLog: async (runId: string) => {
+    try {
+      const response = await auditApi.trail(runId)
+      const events = response.data.events || []
+      // Only show pipeline_step events
+      const stepEvents = events.filter((e: AuditEvent) => e.event_type === 'pipeline_step')
+      set({ actionLog: stepEvents })
+    } catch {
+      // Silently fail — action log is non-critical
+    }
+  },
+
   createRun: async (data?: any) => {
-    set({ loading: true, error: null })
+    set({ loading: true, error: null, actionLog: [] })
     try {
       const response = await runsApi.create(data)
       const run = response.data

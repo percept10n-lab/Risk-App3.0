@@ -49,9 +49,41 @@ async def _run_step_with_timeout(coro, step_name: str, timeout: int = 120):
         raise
 
 
+async def _log_step_event(db: AsyncSession, run_id: str, step: str, action: str, summary: dict | None = None):
+    """Record an audit event for a pipeline step."""
+    event = AuditEvent(
+        run_id=run_id,
+        event_type="pipeline_step",
+        entity_type="run",
+        entity_id=run_id,
+        actor="system",
+        action=action,
+        new_value={"step": step, **(summary or {})},
+    )
+    db.add(event)
+    await db.commit()
+
+
+async def _count_total(db: AsyncSession, model) -> int:
+    """Count total rows in a table."""
+    result = await db.execute(select(sa_func.count(model.id)))
+    return result.scalar() or 0
+
+
+async def _count_for_run(db: AsyncSession, model, run_id: str) -> int:
+    """Count rows in a table filtered by run_id."""
+    result = await db.execute(select(sa_func.count(model.id)).where(model.run_id == run_id))
+    return result.scalar() or 0
+
+
 async def _execute_pipeline(run_id: str, scope: dict):
     """Execute the full assessment pipeline in the background."""
     import asyncio
+    from app.models.asset import Asset
+    from app.models.finding import Finding
+    from app.models.threat import Threat
+    from app.models.risk import Risk
+    from app.models.mitre_mapping import MitreMapping
     from app.services.discovery_service import DiscoveryService, FingerprintService
     from app.services.threat_service import ThreatService
     from app.services.vuln_scan_service import VulnScanService
@@ -80,19 +112,26 @@ async def _execute_pipeline(run_id: str, scope: dict):
         try:
             subnet = (scope.get("subnets") or ["192.168.178.0/24"])[0]
 
+            # Log pipeline start
+            await _log_step_event(db, run_id, "pipeline", "started", {"subnet": subnet})
+
             # Step 1: Discovery
             await _update_run_step(db, run_id, "discovery", completed_steps)
+            await _log_step_event(db, run_id, "discovery", "started")
             logger.info("Pipeline step: discovery", run_id=run_id)
             discovery_svc = DiscoveryService(db)
-            await _run_step_with_timeout(
+            result = await _run_step_with_timeout(
                 discovery_svc.run_discovery(subnet=subnet, run_id=run_id, timeout=60),
                 "discovery", STEP_TIMEOUTS["discovery"],
             )
             await db.commit()
             completed_steps.append("discovery")
+            asset_count = (await db.execute(select(sa_func.count(Asset.id)))).scalar() or 0
+            await _log_step_event(db, run_id, "discovery", "completed", {"assets_found": asset_count, "subnet": subnet})
 
             # Step 2: Fingerprinting
             await _update_run_step(db, run_id, "fingerprinting", completed_steps)
+            await _log_step_event(db, run_id, "fingerprinting", "started")
             logger.info("Pipeline step: fingerprinting", run_id=run_id)
             fingerprint_svc = FingerprintService(db)
             await _run_step_with_timeout(
@@ -101,9 +140,11 @@ async def _execute_pipeline(run_id: str, scope: dict):
             )
             await db.commit()
             completed_steps.append("fingerprinting")
+            await _log_step_event(db, run_id, "fingerprinting", "completed", {"assets_fingerprinted": asset_count})
 
             # Step 3: Threat Modeling
             await _update_run_step(db, run_id, "threat_modeling", completed_steps)
+            await _log_step_event(db, run_id, "threat_modeling", "started")
             logger.info("Pipeline step: threat_modeling", run_id=run_id)
             threat_svc = ThreatService(db)
             await _run_step_with_timeout(
@@ -112,9 +153,12 @@ async def _execute_pipeline(run_id: str, scope: dict):
             )
             await db.commit()
             completed_steps.append("threat_modeling")
+            threat_count = await _count_total(db, Threat)
+            await _log_step_event(db, run_id, "threat_modeling", "completed", {"threats_identified": threat_count})
 
             # Step 4: Vulnerability Scanning
             await _update_run_step(db, run_id, "vuln_scanning", completed_steps)
+            await _log_step_event(db, run_id, "vuln_scanning", "started")
             logger.info("Pipeline step: vuln_scanning", run_id=run_id)
             vuln_svc = VulnScanService(db)
             await _run_step_with_timeout(
@@ -123,9 +167,12 @@ async def _execute_pipeline(run_id: str, scope: dict):
             )
             await db.commit()
             completed_steps.append("vuln_scanning")
+            finding_count = await _count_for_run(db, Finding, run_id)
+            await _log_step_event(db, run_id, "vuln_scanning", "completed", {"findings_found": finding_count})
 
             # Step 5: Exploit Analysis
             await _update_run_step(db, run_id, "exploit_analysis", completed_steps)
+            await _log_step_event(db, run_id, "exploit_analysis", "started")
             logger.info("Pipeline step: exploit_analysis", run_id=run_id)
             exploit_svc = ExploitEnrichmentService(db)
             await _run_step_with_timeout(
@@ -134,9 +181,11 @@ async def _execute_pipeline(run_id: str, scope: dict):
             )
             await db.commit()
             completed_steps.append("exploit_analysis")
+            await _log_step_event(db, run_id, "exploit_analysis", "completed", {"findings_enriched": finding_count})
 
             # Step 6: MITRE Mapping
             await _update_run_step(db, run_id, "mitre_mapping", completed_steps)
+            await _log_step_event(db, run_id, "mitre_mapping", "started")
             logger.info("Pipeline step: mitre_mapping", run_id=run_id)
             mitre_svc = MitreService(db)
             await _run_step_with_timeout(
@@ -145,9 +194,12 @@ async def _execute_pipeline(run_id: str, scope: dict):
             )
             await db.commit()
             completed_steps.append("mitre_mapping")
+            mitre_count = await _count_total(db, MitreMapping)
+            await _log_step_event(db, run_id, "mitre_mapping", "completed", {"techniques_mapped": mitre_count})
 
             # Step 7: Risk Analysis
             await _update_run_step(db, run_id, "risk_analysis", completed_steps)
+            await _log_step_event(db, run_id, "risk_analysis", "started")
             logger.info("Pipeline step: risk_analysis", run_id=run_id)
             risk_svc = RiskAnalysisService(db)
             await _run_step_with_timeout(
@@ -156,9 +208,12 @@ async def _execute_pipeline(run_id: str, scope: dict):
             )
             await db.commit()
             completed_steps.append("risk_analysis")
+            risk_count = await _count_total(db, Risk)
+            await _log_step_event(db, run_id, "risk_analysis", "completed", {"risks_assessed": risk_count})
 
             # Step 8: Baseline
             await _update_run_step(db, run_id, "baseline", completed_steps)
+            await _log_step_event(db, run_id, "baseline", "started")
             logger.info("Pipeline step: baseline", run_id=run_id)
             drift_svc = DriftService(db)
             await _run_step_with_timeout(
@@ -167,6 +222,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
             )
             await db.commit()
             completed_steps.append("baseline")
+            await _log_step_event(db, run_id, "baseline", "completed", {"baseline_created": True})
 
             # Complete
             result = await db.execute(select(Run).where(Run.id == run_id))
@@ -177,11 +233,13 @@ async def _execute_pipeline(run_id: str, scope: dict):
                 run.steps_completed = completed_steps
                 run.completed_at = datetime.utcnow()
                 await db.commit()
+            await _log_step_event(db, run_id, "pipeline", "completed", {"total_steps": len(completed_steps)})
             logger.info("Pipeline completed", run_id=run_id)
 
         except Exception as e:
             logger.error("Pipeline failed", run_id=run_id, error=str(e), step=completed_steps[-1] if completed_steps else "init")
             try:
+                await _log_step_event(db, run_id, completed_steps[-1] if completed_steps else "pipeline", "failed", {"error": str(e)})
                 result = await db.execute(select(Run).where(Run.id == run_id))
                 run = result.scalar_one_or_none()
                 if run:
