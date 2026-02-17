@@ -8,6 +8,7 @@ import {
   Crosshair,
   Target,
   PlayCircle,
+  Workflow,
   Swords,
   Bug,
   FileText,
@@ -18,16 +19,19 @@ import {
   ChevronRight,
   ShieldAlert,
   Radar,
+  Zap,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/intel', icon: Zap, label: 'Threat Intel' },
   { to: '/assets', icon: Monitor, label: 'Assets' },
   { to: '/findings', icon: AlertTriangle, label: 'Findings' },
   { to: '/threats', icon: Crosshair, label: 'Threats' },
   { to: '/risks', icon: Shield, label: 'Risks' },
   { to: '/mitre', icon: Target, label: 'MITRE ATT&CK' },
   { to: '/workflow', icon: PlayCircle, label: 'Workflow' },
+  { to: '/workflow-runner', icon: Workflow, label: 'Workflow Runner' },
   { to: '/pentest', icon: Swords, label: 'Pentest' },
   { to: '/nmap', icon: Radar, label: 'Nmap Scanner' },
   { to: '/vulnmgmt', icon: Bug, label: 'Vuln Management' },
@@ -38,6 +42,7 @@ const navItems = [
 ]
 
 export default function Sidebar() {
+  console.log('[Sidebar.tsx] Sidebar rendering, navItems:', navItems.length)
   const { sidebarOpen, toggleSidebar } = useUIStore()
 
   return (

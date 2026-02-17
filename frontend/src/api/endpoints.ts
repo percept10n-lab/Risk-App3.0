@@ -82,6 +82,11 @@ export const runsApi = {
   executeStep: (stepName: string) => api.post(`/runs/step/${stepName}`),
 }
 
+// Audit
+export const auditApi = {
+  trail: (runId: string) => api.get(`/audit/trail/${runId}`),
+}
+
 // Reports
 export const reportsApi = {
   summary: () => api.get('/reports/summary'),
@@ -141,6 +146,28 @@ export const nmapApi = {
     api.post('/nmap/scan', data),
   results: (params?: Record<string, any>) => api.get('/nmap/results', { params }),
   status: (runId: string) => api.get(`/nmap/status/${runId}`),
+}
+
+// Threat Intelligence
+export const threatIntelApi = {
+  dashboard: (params?: { hours?: number }) => api.get('/threatintel/dashboard', { params }),
+  vulnerabilities: (params?: Record<string, any>) => api.get('/threatintel/vulnerabilities', { params }),
+  vulnerability: (cveId: string) => api.get(`/threatintel/vulnerabilities/${cveId}`),
+  advisories: (params?: Record<string, any>) => api.get('/threatintel/advisories', { params }),
+  advisory: (advisoryId: string) => api.get(`/threatintel/advisories/${advisoryId}`),
+  sources: () => api.get('/threatintel/sources'),
+  ingest: () => api.post('/threatintel/ingest'),
+  ingestSingle: (connector: string) => api.post(`/threatintel/ingest/${connector}`),
+  rebuildTriage: () => api.post('/threatintel/rebuild-triage'),
+  // Identity Monitor
+  identities: () => api.get('/threatintel/identities'),
+  addIdentity: (data: { email: string; label?: string; owner?: string }) => api.post('/threatintel/identities', data),
+  deleteIdentity: (id: string) => api.delete(`/threatintel/identities/${id}`),
+  identityBreaches: (id: string) => api.get(`/threatintel/identities/${id}/breaches`),
+  checkAllIdentities: () => api.post('/threatintel/identities/check-all'),
+  checkIdentity: (id: string) => api.post(`/threatintel/identities/${id}/check`),
+  identitySummary: () => api.get('/threatintel/identities/summary'),
+  passwordCheck: (sha1Hash: string) => api.post('/threatintel/password-check', { sha1_hash: sha1Hash }),
 }
 
 // Schedules
