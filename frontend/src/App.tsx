@@ -17,6 +17,10 @@ import ReportsPage from './components/reports/ReportsPage'
 import CopilotPage from './components/copilot/CopilotPage'
 import DriftPage from './components/drift/DriftPage'
 import SettingsPage from './components/settings/SettingsPage'
+import ThreatIntelLanding from './components/threatintel/ThreatIntelLanding'
+import VulnerabilitiesPage from './components/threatintel/VulnerabilitiesPage'
+import AdvisoriesPage from './components/threatintel/AdvisoriesPage'
+import SourcesPage from './components/threatintel/SourcesPage'
 
 console.log('[App.tsx] Module loaded, all imports resolved')
 
@@ -43,6 +47,10 @@ export default function App() {
         <Route path="/copilot" element={<CopilotPage />} />
         <Route path="/drift" element={<DriftPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/intel" element={<ThreatIntelLanding />} />
+        <Route path="/intel/vulnerabilities" element={<VulnerabilitiesPage />} />
+        <Route path="/intel/advisories" element={<AdvisoriesPage />} />
+        <Route path="/intel/sources" element={<SourcesPage />} />
       </Route>
     </Routes>
   )

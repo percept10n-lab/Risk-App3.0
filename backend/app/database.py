@@ -46,7 +46,7 @@ async def init_db():
         from app.models import (
             asset, finding, threat, risk, mitre_mapping,
             artifact, audit_event, run, policy, override,
-            vulnerability, baseline, schedule
+            vulnerability, baseline, schedule, threatintel
         )
         await conn.run_sync(Base.metadata.create_all)
 

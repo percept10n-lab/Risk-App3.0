@@ -10,7 +10,8 @@ from app.api import (
     assets, findings, threats, risks, mitre,
     runs, pentest, vulnmgmt, reports, copilot,
     drift, settings as settings_api, ws,
-    discovery, audit, artifacts, nmap, schedules
+    discovery, audit, artifacts, nmap, schedules,
+    threatintel,
 )
 from app.services.scheduler_service import SchedulerService
 
@@ -79,6 +80,7 @@ app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
 app.include_router(artifacts.router, prefix="/api/artifacts", tags=["artifacts"])
 app.include_router(nmap.router, prefix="/api/nmap", tags=["nmap"])
 app.include_router(schedules.router, prefix="/api/schedules", tags=["schedules"])
+app.include_router(threatintel.router, prefix="/api/threatintel", tags=["threat-intelligence"])
 
 
 @app.get("/api/health")

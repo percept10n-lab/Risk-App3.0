@@ -19,10 +19,12 @@ import {
   ChevronRight,
   ShieldAlert,
   Radar,
+  Zap,
 } from 'lucide-react'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/intel', icon: Zap, label: 'Threat Intel' },
   { to: '/assets', icon: Monitor, label: 'Assets' },
   { to: '/findings', icon: AlertTriangle, label: 'Findings' },
   { to: '/threats', icon: Crosshair, label: 'Threats' },

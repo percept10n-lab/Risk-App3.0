@@ -148,6 +148,19 @@ export const nmapApi = {
   status: (runId: string) => api.get(`/nmap/status/${runId}`),
 }
 
+// Threat Intelligence
+export const threatIntelApi = {
+  dashboard: (params?: { hours?: number }) => api.get('/threatintel/dashboard', { params }),
+  vulnerabilities: (params?: Record<string, any>) => api.get('/threatintel/vulnerabilities', { params }),
+  vulnerability: (cveId: string) => api.get(`/threatintel/vulnerabilities/${cveId}`),
+  advisories: (params?: Record<string, any>) => api.get('/threatintel/advisories', { params }),
+  advisory: (advisoryId: string) => api.get(`/threatintel/advisories/${advisoryId}`),
+  sources: () => api.get('/threatintel/sources'),
+  ingest: () => api.post('/threatintel/ingest'),
+  ingestSingle: (connector: string) => api.post(`/threatintel/ingest/${connector}`),
+  rebuildTriage: () => api.post('/threatintel/rebuild-triage'),
+}
+
 // Schedules
 export const schedulesApi = {
   list: () => api.get<ScanSchedule[]>('/schedules'),
