@@ -53,7 +53,7 @@ export default function MitrePage() {
       try {
         const res = await api.get('/mitre/mappings/enriched', { params: { page_size: 500 } })
         setMappings(res.data.items || [])
-      } catch { /* empty */ }
+      } catch (err: any) { console.error('Failed to load MITRE mappings:', err.message) }
       setLoading(false)
     }
     load()
@@ -69,7 +69,7 @@ export default function MitrePage() {
       a.download = 'attack-navigator-layer.json'
       a.click()
       URL.revokeObjectURL(url)
-    } catch { /* empty */ }
+    } catch (err: any) { console.error('Failed to export navigator layer:', err.message) }
   }
 
   // Group mappings by technique_id

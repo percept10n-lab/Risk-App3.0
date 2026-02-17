@@ -51,13 +51,13 @@ export default function DashboardPage() {
         const findingsAll = findingsDetailRes.status === 'fulfilled' ? findingsDetailRes.value.data.items || [] : []
 
         const findingsBySeverity: Record<string, number> = {}
-        findingsAll.forEach((f: any) => {
+        findingsAll.forEach((f: { severity: string }) => {
           findingsBySeverity[f.severity] = (findingsBySeverity[f.severity] || 0) + 1
         })
 
         const risksByLevel: Record<string, number> = {}
         const allRisks = risksDetailRes.status === 'fulfilled' ? risksDetailRes.value.data.items || [] : []
-        allRisks.forEach((r: any) => {
+        allRisks.forEach((r: { risk_level: string }) => {
           risksByLevel[r.risk_level] = (risksByLevel[r.risk_level] || 0) + 1
         })
 
@@ -70,7 +70,8 @@ export default function DashboardPage() {
           risks_by_level: risksByLevel,
           recent_findings: findingsAll.slice(0, 5),
         })
-      } catch {
+      } catch (err: any) {
+        console.error('Failed to load dashboard stats:', err.message)
         setStats({
           total_assets: 0, total_findings: 0, total_risks: 0, total_threats: 0,
           findings_by_severity: {}, risks_by_level: {}, recent_findings: [],
@@ -89,7 +90,8 @@ export default function DashboardPage() {
         params: { severity, page_size: 50, include_asset: true, include_mitre: true },
       })
       setSevModal({ severity, items: res.data.items || [], loading: false })
-    } catch {
+    } catch (err: any) {
+      console.error('Failed to load severity findings:', err.message)
       setSevModal({ severity, items: [], loading: false })
     }
   }
@@ -101,7 +103,8 @@ export default function DashboardPage() {
         params: { risk_level: level, page_size: 50, include_asset: true },
       })
       setRiskModal({ level, items: res.data.items || [], loading: false })
-    } catch {
+    } catch (err: any) {
+      console.error('Failed to load risk scenarios:', err.message)
       setRiskModal({ level, items: [], loading: false })
     }
   }

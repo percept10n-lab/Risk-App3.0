@@ -18,13 +18,34 @@ const STEPS = [
 export default function WorkflowPage() {
   const { runs, activeRun, loading, polling, error, fetchRuns, createRun, pauseRun, resumeRun, cancelRun, stopPolling } = useRunStore()
   const [subnet, setSubnet] = useState('192.168.178.0/24')
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchRuns()
     return () => { stopPolling() }
   }, [])
 
+  const validateSubnet = (value: string): string | null => {
+    const match = value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/)
+    if (!match) return 'Invalid IP address or CIDR notation'
+    for (let i = 1; i <= 4; i++) {
+      const octet = parseInt(match[i])
+      if (octet < 0 || octet > 255) return `Invalid octet: ${match[i]}`
+    }
+    if (match[6] !== undefined) {
+      const prefix = parseInt(match[6])
+      if (prefix < 0 || prefix > 32) return `Invalid prefix length: /${match[6]}`
+    }
+    return null
+  }
+
   const handleNewRun = async () => {
+    const err = validateSubnet(subnet)
+    if (err) {
+      setValidationError(err)
+      return
+    }
+    setValidationError(null)
     await createRun({ scope: { subnets: [subnet] } })
   }
 
@@ -48,7 +69,7 @@ export default function WorkflowPage() {
             <input
               type="text"
               value={subnet}
-              onChange={(e) => setSubnet(e.target.value)}
+              onChange={(e) => { setSubnet(e.target.value); setValidationError(null) }}
               placeholder="192.168.178.0/24"
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-44"
               disabled={!!isRunning}
@@ -63,6 +84,12 @@ export default function WorkflowPage() {
           </div>
         }
       />
+
+      {validationError && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" /> {validationError}
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center gap-2">

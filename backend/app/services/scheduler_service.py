@@ -55,12 +55,24 @@ class SchedulerService:
             trigger = IntervalTrigger(hours=schedule.interval_hours)
         elif schedule.schedule_type == "cron" and schedule.cron_expression:
             parts = schedule.cron_expression.strip().split()
-            cron_kwargs = {}
             fields = ["minute", "hour", "day", "month", "day_of_week"]
+            if len(parts) != len(fields):
+                logger.warning(
+                    "Invalid cron expression: expected 5 fields",
+                    id=schedule.id, expression=schedule.cron_expression, parts=len(parts),
+                )
+                return
+            cron_kwargs = {}
             for i, field in enumerate(fields):
-                if i < len(parts):
-                    cron_kwargs[field] = parts[i]
-            trigger = CronTrigger(**cron_kwargs)
+                cron_kwargs[field] = parts[i]
+            try:
+                trigger = CronTrigger(**cron_kwargs)
+            except (ValueError, KeyError) as e:
+                logger.warning(
+                    "Invalid cron expression", id=schedule.id,
+                    expression=schedule.cron_expression, error=str(e),
+                )
+                return
         else:
             logger.warning("Invalid schedule config, skipping", id=schedule.id)
             return
@@ -168,7 +180,7 @@ class SchedulerService:
                 if scan_type in ("full", "threat_only"):
                     from app.services.threat_service import ThreatService
                     threat_svc = ThreatService(db)
-                    await threat_svc.generate_threats(run_id=run_id)
+                    await threat_svc.run_threat_modeling(run_id=run_id)
 
                 # Update run status
                 run.status = "completed"
@@ -201,8 +213,8 @@ class SchedulerService:
                     if schedule:
                         schedule.last_run_at = datetime.utcnow()
                         await db.commit()
-            except Exception:
-                pass
+            except Exception as inner_err:
+                logger.error("Failed to update schedule after scan failure", schedule_id=schedule_id, error=str(inner_err))
 
     async def run_now(self, schedule_id: str):
         """Trigger a schedule to run immediately."""

@@ -9,13 +9,33 @@ import { RotateCcw, AlertCircle } from 'lucide-react'
 
 type Phase = 'configure' | 'running' | 'completed' | 'error'
 
+interface PipelineResult {
+  hosts_discovered?: number
+  assets_created?: number
+  assets_updated?: number
+  findings_created?: number
+  threats_created?: number
+  risks_created?: number
+  [key: string]: unknown
+}
+
+interface WsMessage {
+  type: string
+  line?: string
+  step?: string
+  status?: string
+  detail?: string
+  result?: PipelineResult
+  error?: string
+}
+
 export default function NmapPage() {
   const [phase, setPhase] = useState<Phase>('configure')
   const [runId, setRunId] = useState<string | null>(null)
   const [consoleLines, setConsoleLines] = useState<string[]>([])
   const [wsConnected, setWsConnected] = useState(false)
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(DEFAULT_PIPELINE_STEPS)
-  const [pipelineResult, setPipelineResult] = useState<any>(null)
+  const [pipelineResult, setPipelineResult] = useState<PipelineResult | null>(null)
   const [errorMessage, setErrorMessage] = useState('')
   const [autoPipeline, setAutoPipeline] = useState(true)
   const wsRef = useRef<WebSocket | null>(null)
@@ -48,8 +68,8 @@ export default function NmapPage() {
       try {
         const msg = JSON.parse(event.data)
         handleWsMessage(msg)
-      } catch {
-        // ignore non-JSON messages
+      } catch (err: any) {
+        console.warn('Failed to parse WebSocket message:', err.message)
       }
     }
 
@@ -64,7 +84,7 @@ export default function NmapPage() {
     }
   }, [])
 
-  const handleWsMessage = useCallback((msg: any) => {
+  const handleWsMessage = useCallback((msg: WsMessage) => {
     switch (msg.type) {
       case 'nmap_output':
         setConsoleLines(prev => [...prev, msg.line || ''])
@@ -120,8 +140,8 @@ export default function NmapPage() {
           setErrorMessage(data.error || 'Pipeline failed')
           if (pollRef.current) clearInterval(pollRef.current)
         }
-      } catch {
-        // keep polling
+      } catch (err: any) {
+        console.warn('Polling status check failed:', err.message)
       }
     }, 3000)
   }, [])
