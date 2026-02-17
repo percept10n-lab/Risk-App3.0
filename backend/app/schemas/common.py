@@ -54,6 +54,11 @@ class ArtifactResponse(BaseModel):
         from_attributes = True
 
 
+class ErrorResponse(BaseModel):
+    detail: str
+    error_code: str | None = None
+
+
 class HealthResponse(BaseModel):
     status: str
     version: str

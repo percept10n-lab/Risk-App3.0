@@ -34,6 +34,7 @@ interface InvestigateData {
 export default function CopilotPage() {
   const [triageResults, setTriageResults] = useState<TriageItem[]>([])
   const [loading, setLoading] = useState<Record<string, boolean>>({})
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Workflow state
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
@@ -48,10 +49,13 @@ export default function CopilotPage() {
 
   async function runTriage() {
     setLoading((p) => ({ ...p, triage: true }))
+    setActionError(null)
     try {
       const res = await copilotApi.triage([])
       setTriageResults(res.data.findings || [])
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.message || 'Triage failed')
+    }
     setLoading((p) => ({ ...p, triage: false }))
   }
 
@@ -66,7 +70,9 @@ export default function CopilotPage() {
       const res = await copilotApi.investigate(findingId)
       setInvestigateData(res.data)
       setCurrentStep('PLAN')
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.message || 'Investigation failed')
+    }
     setLoading((p) => ({ ...p, investigate: false }))
   }
 
@@ -80,7 +86,9 @@ export default function CopilotPage() {
         action: 'set_in_progress',
       })
       setExecuteResult(res.data)
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.message || 'Execution failed')
+    }
     setLoading((p) => ({ ...p, execute: false }))
   }
 
@@ -96,7 +104,9 @@ export default function CopilotPage() {
       })
       setVerifyResult(res.data)
       setCurrentStep('REPORT')
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.message || 'Verification failed')
+    }
     setLoading((p) => ({ ...p, verify: false }))
   }
 
@@ -110,7 +120,9 @@ export default function CopilotPage() {
       // Refresh triage
       runTriage()
       resetWorkflow()
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.message || 'Failed to mark as fixed')
+    }
   }
 
   function resetWorkflow() {
@@ -147,6 +159,13 @@ export default function CopilotPage() {
           </div>
         }
       />
+
+      {actionError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <span className="text-sm text-red-700">{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600 text-sm ml-4">Dismiss</button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left: Triage List */}

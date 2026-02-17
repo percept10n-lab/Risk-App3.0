@@ -53,6 +53,12 @@ export interface Finding {
   updated_at: string
 }
 
+// Finding with enrichment data from API
+export interface EnrichedFinding extends Finding {
+  asset?: { id: string; hostname: string | null; ip_address: string } | null
+  mitre_techniques?: Array<{ technique_id: string; technique_name: string; tactic: string }> | null
+}
+
 // Threat
 export interface Threat {
   id: string

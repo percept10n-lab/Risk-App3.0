@@ -60,12 +60,17 @@ export const useAssetStore = create<AssetState>((set, get) => ({
   },
 
   deleteAsset: async (id: string) => {
-    const response = await assetsApi.delete(id)
-    set((state) => ({
-      assets: state.assets.filter((a) => a.id !== id),
-      total: state.total - 1,
-    }))
-    return response.data
+    try {
+      const response = await assetsApi.delete(id)
+      set((state) => ({
+        assets: state.assets.filter((a) => a.id !== id),
+        total: state.total - 1,
+      }))
+      return response.data
+    } catch (err: any) {
+      set({ error: err.message || 'Failed to delete asset' })
+      throw err
+    }
   },
 
   setFilters: (filters) => {

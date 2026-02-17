@@ -108,20 +108,24 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    settingsApi.getAiConfig().then((res) => setAiConfig(res.data)).catch(() => {})
-    settingsApi.getPolicy().then((res) => {
-      if (res.data.length > 0) {
-        const p = res.data[0]
-        setPolicy({
-          name: p.name || DEFAULT_POLICY.name,
-          scope_allowlist: p.scope_allowlist || DEFAULT_POLICY.scope_allowlist,
-          scope_denylist: p.scope_denylist || DEFAULT_POLICY.scope_denylist,
-          action_allowlist: p.action_allowlist || DEFAULT_POLICY.action_allowlist,
-          rate_limits: p.rate_limits || DEFAULT_POLICY.rate_limits,
-          time_windows: p.time_windows || DEFAULT_POLICY.time_windows,
-        })
-      }
-    }).catch(() => {})
+    settingsApi.getAiConfig()
+      .then((res) => setAiConfig(res.data))
+      .catch((err) => console.error('Failed to load AI config:', err.message))
+    settingsApi.getPolicy()
+      .then((res) => {
+        if (res.data.length > 0) {
+          const p = res.data[0]
+          setPolicy({
+            name: p.name || DEFAULT_POLICY.name,
+            scope_allowlist: p.scope_allowlist || DEFAULT_POLICY.scope_allowlist,
+            scope_denylist: p.scope_denylist || DEFAULT_POLICY.scope_denylist,
+            action_allowlist: p.action_allowlist || DEFAULT_POLICY.action_allowlist,
+            rate_limits: p.rate_limits || DEFAULT_POLICY.rate_limits,
+            time_windows: p.time_windows || DEFAULT_POLICY.time_windows,
+          })
+        }
+      })
+      .catch((err) => console.error('Failed to load policy:', err.message))
   }, [])
 
   useEffect(() => {
@@ -133,7 +137,9 @@ export default function SettingsPage() {
     try {
       const res = await schedulesApi.list()
       setSchedules(res.data)
-    } catch { /* empty */ }
+    } catch (err: any) {
+      console.error('Failed to load schedules:', err.message)
+    }
     setSchedulesLoading(false)
   }
 

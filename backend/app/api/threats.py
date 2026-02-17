@@ -12,6 +12,7 @@ from app.models.mitre_mapping import MitreMapping
 from app.schemas.threat import ThreatCreate, ThreatUpdate, ThreatResponse
 from app.schemas.common import PaginatedResponse
 from app.services.threat_service import ThreatService
+from app.services.pagination import paginate
 
 router = APIRouter()
 
@@ -30,22 +31,17 @@ async def list_threats(
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Threat)
-    count_query = select(sa_func.count(Threat.id))
     if asset_id:
         query = query.where(Threat.asset_id == asset_id)
-        count_query = count_query.where(Threat.asset_id == asset_id)
     if threat_type:
         query = query.where(Threat.threat_type == threat_type)
-        count_query = count_query.where(Threat.threat_type == threat_type)
     if zone:
         query = query.where(Threat.zone == zone)
-        count_query = count_query.where(Threat.zone == zone)
     if source:
         query = query.where(Threat.source == source)
-        count_query = count_query.where(Threat.source == source)
-    total = (await db.execute(count_query)).scalar() or 0
-    result = await db.execute(query.offset((page - 1) * page_size).limit(page_size).order_by(Threat.created_at.desc()))
-    items = list(result.scalars().all())
+    query = query.order_by(Threat.created_at.desc())
+
+    items, total = await paginate(db, query, page, page_size)
 
     serialized = [ThreatResponse.model_validate(t).model_dump() for t in items]
 

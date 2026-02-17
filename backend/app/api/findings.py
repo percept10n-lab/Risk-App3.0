@@ -14,6 +14,7 @@ from app.models.audit_event import AuditEvent
 from app.schemas.finding import FindingCreate, FindingUpdate, FindingResponse
 from app.schemas.common import PaginatedResponse, OverrideRequest
 from app.services.vuln_scan_service import VulnScanService
+from app.services.pagination import paginate
 
 router = APIRouter()
 
@@ -31,25 +32,17 @@ async def list_findings(
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Finding)
-    count_query = select(sa_func.count(Finding.id))
-
     if asset_id:
         query = query.where(Finding.asset_id == asset_id)
-        count_query = count_query.where(Finding.asset_id == asset_id)
     if severity:
         query = query.where(Finding.severity == severity)
-        count_query = count_query.where(Finding.severity == severity)
     if status:
         query = query.where(Finding.status == status)
-        count_query = count_query.where(Finding.status == status)
     if category:
         query = query.where(Finding.category == category)
-        count_query = count_query.where(Finding.category == category)
+    query = query.order_by(Finding.created_at.desc())
 
-    total = (await db.execute(count_query)).scalar() or 0
-    query = query.offset((page - 1) * page_size).limit(page_size).order_by(Finding.created_at.desc())
-    result = await db.execute(query)
-    items = list(result.scalars().all())
+    items, total = await paginate(db, query, page, page_size)
 
     # Always serialize to dicts for consistent response
     serialized = [FindingResponse.model_validate(f).model_dump() for f in items]

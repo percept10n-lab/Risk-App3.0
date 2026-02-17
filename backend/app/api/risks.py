@@ -16,6 +16,7 @@ from app.schemas.risk import RiskCreate, RiskUpdate, RiskResponse, TreatmentRequ
 from app.schemas.common import PaginatedResponse, OverrideRequest
 from app.services.risk_analysis_service import RiskAnalysisService
 from app.services.exploit_service import ExploitEnrichmentService
+from app.services.pagination import paginate
 
 router = APIRouter()
 
@@ -32,22 +33,17 @@ async def list_risks(
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Risk)
-    count_query = select(sa_func.count(Risk.id))
     if asset_id:
         query = query.where(Risk.asset_id == asset_id)
-        count_query = count_query.where(Risk.asset_id == asset_id)
     if finding_id:
         query = query.where(Risk.finding_id == finding_id)
-        count_query = count_query.where(Risk.finding_id == finding_id)
     if risk_level:
         query = query.where(Risk.risk_level == risk_level)
-        count_query = count_query.where(Risk.risk_level == risk_level)
     if status:
         query = query.where(Risk.status == status)
-        count_query = count_query.where(Risk.status == status)
-    total = (await db.execute(count_query)).scalar() or 0
-    result = await db.execute(query.offset((page - 1) * page_size).limit(page_size).order_by(Risk.created_at.desc()))
-    items = list(result.scalars().all())
+    query = query.order_by(Risk.created_at.desc())
+
+    items, total = await paginate(db, query, page, page_size)
 
     serialized = [RiskResponse.model_validate(r).model_dump() for r in items]
 

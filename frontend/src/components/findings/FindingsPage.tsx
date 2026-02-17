@@ -9,13 +9,13 @@ import { useAssetStore } from '../../stores/assetStore'
 import { vulnScanApi } from '../../api/endpoints'
 import { formatRelativeTime } from '../../utils/format'
 import { Loader2, Search } from 'lucide-react'
-import type { Finding } from '../../types'
+import type { Finding, EnrichedFinding } from '../../types'
 
 const columns = [
   {
     key: 'severity',
     header: 'Severity',
-    render: (f: any) => (
+    render: (f: EnrichedFinding) => (
       <Badge variant={f.severity as any}>{f.severity}</Badge>
     ),
     className: 'w-24',
@@ -23,7 +23,7 @@ const columns = [
   {
     key: 'title',
     header: 'Title',
-    render: (f: any) => (
+    render: (f: EnrichedFinding) => (
       <div>
         <p className="font-medium text-sm">{f.title}</p>
         <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 max-w-lg" title={f.description}>{f.description}</p>
@@ -33,7 +33,7 @@ const columns = [
   {
     key: 'asset',
     header: 'Asset',
-    render: (f: any) => {
+    render: (f: EnrichedFinding) => {
       if (!f.asset) return <span className="text-xs text-gray-400">—</span>
       return (
         <div className="text-xs">
@@ -46,24 +46,24 @@ const columns = [
   {
     key: 'category',
     header: 'Category',
-    render: (f: any) => <span className="capitalize text-sm">{f.category}</span>,
+    render: (f: EnrichedFinding) => <span className="capitalize text-sm">{f.category}</span>,
   },
   {
     key: 'source_tool',
     header: 'Source',
-    render: (f: any) => <span className="font-mono text-xs">{f.source_tool}</span>,
+    render: (f: EnrichedFinding) => <span className="font-mono text-xs">{f.source_tool}</span>,
   },
   {
     key: 'mitre',
     header: 'MITRE',
-    render: (f: any) => {
-      const techniques: any[] = f.mitre_techniques || []
+    render: (f: EnrichedFinding) => {
+      const techniques = f.mitre_techniques || []
       if (techniques.length === 0) return <span className="text-xs text-gray-400">—</span>
       const visible = techniques.slice(0, 2)
       const overflow = techniques.length - 2
       return (
         <div className="flex flex-wrap gap-1">
-          {visible.map((m: any) => (
+          {visible.map((m) => (
             <span key={m.technique_id} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-mono">
               {m.technique_id}
             </span>
@@ -76,7 +76,7 @@ const columns = [
   {
     key: 'status',
     header: 'Status',
-    render: (f: any) => {
+    render: (f: EnrichedFinding) => {
       const variant = f.status === 'open' ? 'high' : f.status === 'fixed' ? 'success' : 'info'
       return <Badge variant={variant}>{f.status}</Badge>
     },
@@ -84,7 +84,7 @@ const columns = [
   {
     key: 'created_at',
     header: 'Found',
-    render: (f: any) => formatRelativeTime(f.created_at),
+    render: (f: EnrichedFinding) => formatRelativeTime(f.created_at),
   },
 ]
 

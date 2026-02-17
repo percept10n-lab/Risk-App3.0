@@ -1,3 +1,4 @@
+import asyncio
 import json
 import uuid
 from datetime import datetime
@@ -14,6 +15,8 @@ from app.models.risk import Risk
 from app.models.mitre_mapping import MitreMapping
 from app.services.report_service import ReportService
 from app.evidence.artifact_store import ArtifactStore
+
+REPORT_TIMEOUT_SECONDS = 120
 
 router = APIRouter()
 
@@ -34,6 +37,19 @@ async def get_summary(db: AsyncSession = Depends(get_db)):
 @router.post("/generate")
 async def generate_report(request: ReportGenerateRequest, db: AsyncSession = Depends(get_db)):
     """Generate a report."""
+    try:
+        return await asyncio.wait_for(
+            _build_report(request, db),
+            timeout=REPORT_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=504,
+            detail=f"Report generation timed out after {REPORT_TIMEOUT_SECONDS}s",
+        )
+
+
+async def _build_report(request: ReportGenerateRequest, db: AsyncSession):
     report_service = ReportService(db)
     artifact_store = ArtifactStore(db)
 
