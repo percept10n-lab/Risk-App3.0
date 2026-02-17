@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useUIStore } from '../../stores/uiStore'
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react'
 
@@ -19,17 +19,20 @@ const colors = {
 export default function Notifications() {
   const { notifications, removeNotification } = useUIStore()
 
+  const notificationsRef = useRef(notifications)
+  notificationsRef.current = notifications
+
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now()
-      notifications.forEach((n) => {
+      notificationsRef.current.forEach((n) => {
         if (now - n.timestamp > 5000) {
           removeNotification(n.id)
         }
       })
     }, 1000)
     return () => clearInterval(timer)
-  }, [notifications, removeNotification])
+  }, [removeNotification])
 
   if (notifications.length === 0) return null
 

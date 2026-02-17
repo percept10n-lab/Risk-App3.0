@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -21,7 +21,7 @@ _pipeline_status: dict[str, dict] = {}
 class CustomScanRequest(BaseModel):
     target: str
     nmap_args: str = "-sT"
-    timeout: int = 600
+    timeout: int = Field(600, ge=10, le=3600)
     auto_pipeline: bool = True
 
 

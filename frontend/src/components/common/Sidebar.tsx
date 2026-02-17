@@ -58,6 +58,8 @@ export default function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
+            aria-label={!sidebarOpen ? item.label : undefined}
+            title={!sidebarOpen ? item.label : undefined}
             className={({ isActive }) =>
               `flex items-center px-4 py-2.5 mx-2 rounded-lg text-sm transition-colors ${
                 isActive
@@ -74,6 +76,7 @@ export default function Sidebar() {
 
       <button
         onClick={toggleSidebar}
+        aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         className="flex items-center justify-center h-12 border-t border-gray-800 hover:bg-gray-800 transition-colors"
       >
         {sidebarOpen ? (

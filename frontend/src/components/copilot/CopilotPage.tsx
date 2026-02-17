@@ -22,11 +22,37 @@ const STEP_LABELS: Record<string, string> = {
   EXECUTE: 'Execute', VERIFY: 'Verify', REPORT: 'Report',
 }
 
+interface InvestigateFinding {
+  id: string; title: string; severity: string; category: string; status: string
+  description?: string; remediation?: string
+}
+
+interface InvestigateAsset {
+  id: string; hostname: string | null; ip_address: string; asset_type: string; zone: string; criticality: string
+}
+
+interface InvestigateMitre {
+  technique_id: string; technique_name: string; tactic: string; confidence?: number
+}
+
+interface InvestigateRisk {
+  id: string; scenario: string; risk_level: string; likelihood?: string; impact?: string
+}
+
+interface ExecuteResult {
+  old_status: string; new_status: string; action: string
+}
+
+interface VerifyResult {
+  verdict: string; target: string; scan_findings_count: number
+  scan_result?: { findings?: Array<{ severity: string; title: string }> }
+}
+
 interface InvestigateData {
-  finding: any
-  asset: any
-  mitre_mappings: any[]
-  risks: any[]
+  finding: InvestigateFinding
+  asset: InvestigateAsset | null
+  mitre_mappings: InvestigateMitre[]
+  risks: InvestigateRisk[]
   analysis: { what: string; why_relevant: string[]; attack_context: string[]; risk_context: string[]; asset_context: string }
   plan: { steps: Array<{ step: number; action: string; detail: string }>; risk_notes: string[]; estimated_effort: string; verification: string }
 }
@@ -40,8 +66,8 @@ export default function CopilotPage() {
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('IDLE')
   const [investigateData, setInvestigateData] = useState<InvestigateData | null>(null)
-  const [executeResult, setExecuteResult] = useState<any>(null)
-  const [verifyResult, setVerifyResult] = useState<any>(null)
+  const [executeResult, setExecuteResult] = useState<ExecuteResult | null>(null)
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null)
 
   useEffect(() => {
     runTriage()
@@ -305,7 +331,7 @@ export default function CopilotPage() {
                             <div>
                               <h4 className="text-sm font-semibold text-gray-700 mb-2">MITRE ATT&CK</h4>
                               <div className="flex flex-wrap gap-1">
-                                {investigateData.mitre_mappings.map((m: any) => (
+                                {investigateData.mitre_mappings.map((m) => (
                                   <span key={m.technique_id} className="bg-brand-50 text-brand-700 px-2 py-1 rounded text-xs font-mono">
                                     {m.technique_id} ({m.tactic})
                                   </span>
@@ -319,7 +345,7 @@ export default function CopilotPage() {
                             <div>
                               <h4 className="text-sm font-semibold text-gray-700 mb-2">Risk Scenarios</h4>
                               <div className="space-y-1">
-                                {investigateData.risks.map((r: any) => (
+                                {investigateData.risks.map((r) => (
                                   <div key={r.id} className="flex items-start gap-2">
                                     <Badge variant={r.risk_level as any}>{r.risk_level}</Badge>
                                     <p className="text-xs text-gray-600">{r.scenario}</p>
@@ -333,7 +359,7 @@ export default function CopilotPage() {
                           <div>
                             <h4 className="text-sm font-semibold text-gray-700 mb-2">Remediation Plan</h4>
                             <ol className="space-y-2">
-                              {investigateData.plan.steps.map((step: any) => (
+                              {investigateData.plan.steps.map((step) => (
                                 <li key={step.step} className="flex gap-2 text-sm">
                                   <span className="font-bold text-brand-600 shrink-0">{step.step}.</span>
                                   <div>
@@ -499,7 +525,7 @@ export default function CopilotPage() {
                         <div>
                           <h4 className="text-sm font-semibold text-gray-700 mb-2">Scan Findings</h4>
                           <div className="space-y-1">
-                            {verifyResult.scan_result.findings.map((f: any, i: number) => (
+                            {verifyResult.scan_result.findings.map((f, i) => (
                               <div key={i} className="flex items-center gap-2 text-xs p-2 bg-gray-50 rounded">
                                 <Badge variant={f.severity as any}>{f.severity}</Badge>
                                 <span>{f.title}</span>

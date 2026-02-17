@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.services.discovery_service import DiscoveryService, FingerprintService
@@ -17,19 +17,19 @@ router = APIRouter()
 
 class DiscoveryRequest(BaseModel):
     subnet: str = "192.168.178.0/24"
-    timeout: int = 60
+    timeout: int = Field(60, ge=10, le=3600)
     run_id: str | None = None
 
 
 class NmapDiscoverRequest(BaseModel):
     network: str
-    timeout: int = 300
+    timeout: int = Field(300, ge=10, le=3600)
 
 
 class FingerprintRequest(BaseModel):
     asset_id: str | None = None
     run_id: str | None = None
-    timeout: int = 120
+    timeout: int = Field(120, ge=10, le=3600)
 
 
 @router.post("/discover")
@@ -74,7 +74,7 @@ async def run_fingerprinting(request: FingerprintRequest, db: AsyncSession = Dep
 
 class FullScanRequest(BaseModel):
     subnet: str = "192.168.178.0/24"
-    timeout: int = 900
+    timeout: int = Field(900, ge=60, le=7200)
     include_threat_modeling: bool = True
     include_vuln_scan: bool = True
     include_exploit_analysis: bool = True

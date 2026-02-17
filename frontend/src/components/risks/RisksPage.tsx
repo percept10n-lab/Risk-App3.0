@@ -308,6 +308,7 @@ export default function RisksPage() {
                     {/* Asset Group Header */}
                     <button
                       onClick={() => setExpandedAssets((prev) => ({ ...prev, [assetId]: !prev[assetId] }))}
+                      aria-expanded={!isCollapsed}
                       className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-50 text-left border-b bg-gray-50"
                     >
                       {isCollapsed ? <ChevronRight className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
@@ -325,7 +326,7 @@ export default function RisksPage() {
                           return (
                             <div key={r.id}>
                               <div className="flex items-center gap-2 px-4 py-2 hover:bg-gray-50">
-                                <button onClick={() => toggleExpand(r.id)} className="p-1 hover:bg-gray-100 rounded shrink-0">
+                                <button onClick={() => toggleExpand(r.id)} aria-expanded={!!ctx} className="p-1 hover:bg-gray-100 rounded shrink-0">
                                   {expandedLoading[r.id] ? (
                                     <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
                                   ) : ctx ? (

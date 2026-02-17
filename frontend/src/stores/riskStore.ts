@@ -46,7 +46,7 @@ export const useRiskStore = create<RiskState>((set, get) => ({
         loading: false,
       })
     } catch (err: any) {
-      set({ error: err.message, loading: false })
+      set({ error: err.response?.data?.detail || err.message || 'Failed to fetch risks', loading: false })
     }
   },
 
@@ -56,7 +56,7 @@ export const useRiskStore = create<RiskState>((set, get) => ({
       const response = await risksApi.get(id)
       set({ selectedRisk: response.data, loading: false })
     } catch (err: any) {
-      set({ error: err.message, loading: false })
+      set({ error: err.response?.data?.detail || err.message || 'Failed to fetch risk', loading: false })
     }
   },
 

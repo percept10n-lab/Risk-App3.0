@@ -14,8 +14,21 @@ interface FindingInfo {
   status: string
 }
 
+interface FindingDetail {
+  id: string; title: string; severity: string; category: string; status: string
+  description?: string; remediation?: string; evidence?: string
+  asset_id?: string; source_tool?: string; created_at?: string
+}
+
+interface VulnMetrics {
+  total_findings: number
+  by_severity: Record<string, number>
+  by_status: Record<string, number>
+  [key: string]: unknown
+}
+
 interface FindingContext {
-  finding: any
+  finding: FindingDetail
   asset: { id: string; hostname: string | null; ip_address: string; asset_type: string; zone: string; criticality: string } | null
   mitre_mappings: Array<{ technique_id: string; technique_name: string; tactic: string }>
   risks: Array<{ id: string; scenario: string; risk_level: string }>
@@ -23,7 +36,7 @@ interface FindingContext {
 
 export default function VulnMgmtPage() {
   const [findings, setFindings] = useState<FindingInfo[]>([])
-  const [metrics, setMetrics] = useState<any>(null)
+  const [metrics, setMetrics] = useState<VulnMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)

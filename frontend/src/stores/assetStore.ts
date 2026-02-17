@@ -45,7 +45,7 @@ export const useAssetStore = create<AssetState>((set, get) => ({
         loading: false,
       })
     } catch (err: any) {
-      set({ error: err.message, loading: false })
+      set({ error: err.response?.data?.detail || err.message || 'Failed to fetch assets', loading: false })
     }
   },
 
@@ -55,7 +55,7 @@ export const useAssetStore = create<AssetState>((set, get) => ({
       const response = await assetsApi.get(id)
       set({ selectedAsset: response.data, loading: false })
     } catch (err: any) {
-      set({ error: err.message, loading: false })
+      set({ error: err.response?.data?.detail || err.message || 'Failed to fetch asset', loading: false })
     }
   },
 
