@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useThreatIntelStore } from '../../stores/threatIntelStore'
+import { useIdentityMonitorStore } from '../../stores/identityMonitorStore'
 import Badge from '../common/Badge'
 import {
   RefreshCw, AlertTriangle, Shield, Activity, Clock,
   ChevronRight, ExternalLink, Copy, Loader2, Zap,
   Database, Globe, FileWarning, TrendingUp, Server,
-  CheckCircle2, XCircle, ArrowUpRight,
+  CheckCircle2, XCircle, ArrowUpRight, UserX, Mail,
 } from 'lucide-react'
 
 const TYPE_LABELS: Record<string, string> = {
@@ -53,9 +54,10 @@ export default function ThreatIntelLanding() {
     loading, ingesting, error, timeWindow,
     setTimeWindow, fetchDashboard, runIngest,
   } = useThreatIntelStore()
+  const { summary: identitySummary, fetchSummary: fetchIdentitySummary } = useIdentityMonitorStore()
   const navigate = useNavigate()
 
-  useEffect(() => { fetchDashboard() }, [])
+  useEffect(() => { fetchDashboard(); fetchIdentitySummary() }, [])
 
   const copyList = (items: { primary_id: string }[]) => {
     navigator.clipboard.writeText(items.map(i => i.primary_id).join('\n'))
@@ -104,7 +106,7 @@ export default function ThreatIntelLanding() {
 
       {/* ── B) Key Counters ── */}
       {counters && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3">
           <CounterCard
             label="KEV Additions" sublabel="7d" value={counters.kev_additions_7d}
             icon={<Zap className="w-4 h-4" />} color="red"
@@ -139,6 +141,16 @@ export default function ThreatIntelLanding() {
             label="Total Advisories" sublabel="" value={counters.total_advisories}
             icon={<Shield className="w-4 h-4" />} color="gray"
             onClick={() => navigate('/intel/advisories')}
+          />
+          <CounterCard
+            label="Exposed IDs" sublabel="" value={identitySummary?.exposed_identities ?? 0}
+            icon={<UserX className="w-4 h-4" />} color={identitySummary && identitySummary.exposed_identities > 0 ? 'red' : 'green'}
+            onClick={() => navigate('/intel/identity-monitor')}
+          />
+          <CounterCard
+            label="Breach Hits" sublabel="" value={identitySummary?.total_breaches ?? 0}
+            icon={<Mail className="w-4 h-4" />} color={identitySummary && identitySummary.critical_breaches > 0 ? 'red' : 'gray'}
+            onClick={() => navigate('/intel/identity-monitor')}
           />
         </div>
       )}
@@ -348,6 +360,74 @@ export default function ThreatIntelLanding() {
         </div>
       </div>
 
+      {/* ── F) Identity Monitor (breach exposure) ── */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h2 className="text-base font-semibold flex items-center gap-2">
+            <UserX className="w-4 h-4 text-purple-500" /> Identity Monitor
+            {identitySummary && identitySummary.exposed_identities > 0 && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                {identitySummary.exposed_identities} exposed
+              </span>
+            )}
+          </h2>
+          <Link to="/intel/identity-monitor" className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1">
+            Manage <ArrowUpRight className="w-3 h-3" />
+          </Link>
+        </div>
+        {identitySummary && identitySummary.total_identities > 0 ? (
+          <div className="p-5">
+            <div className="grid grid-cols-4 gap-4 mb-4">
+              <div className="text-center">
+                <span className="text-2xl font-bold text-gray-800">{identitySummary.total_identities}</span>
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5">Monitored</p>
+              </div>
+              <div className="text-center">
+                <span className={`text-2xl font-bold ${identitySummary.exposed_identities > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                  {identitySummary.exposed_identities}
+                </span>
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5">Exposed</p>
+              </div>
+              <div className="text-center">
+                <span className={`text-2xl font-bold ${identitySummary.critical_breaches > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                  {identitySummary.critical_breaches}
+                </span>
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5">Critical</p>
+              </div>
+              <div className="text-center">
+                <span className="text-2xl font-bold text-gray-600">{identitySummary.total_breaches}</span>
+                <p className="text-[10px] text-gray-400 font-medium mt-0.5">Breach Hits</p>
+              </div>
+            </div>
+            {identitySummary.latest_breaches.length > 0 && (
+              <div className="border-t border-gray-100 pt-3">
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Latest Findings</span>
+                <div className="mt-2 space-y-1.5">
+                  {identitySummary.latest_breaches.slice(0, 3).map((b: any) => (
+                    <div key={b.id} className="flex items-center gap-2 text-xs">
+                      <Badge variant={b.severity === 'critical' ? 'critical' : b.severity === 'high' ? 'high' : 'medium'}>
+                        {b.severity}
+                      </Badge>
+                      <span className="text-gray-600 font-medium">{b.email}</span>
+                      <span className="text-gray-400">in</span>
+                      <span className="text-gray-800 font-medium">{b.breach_name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+            <Mail className="w-8 h-8 mb-2" />
+            <p className="text-xs font-medium">No identities monitored</p>
+            <Link to="/intel/identity-monitor" className="text-xs text-brand-500 hover:text-brand-600 mt-1">
+              Add email addresses to monitor
+            </Link>
+          </div>
+        )}
+      </div>
+
       {/* ── E) Source Health ── */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -410,6 +490,7 @@ function CounterCard({ label, sublabel, value, icon, color, onClick }: {
     amber: 'bg-amber-50 text-amber-600 border-amber-100',
     orange: 'bg-orange-50 text-orange-600 border-orange-100',
     blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    green: 'bg-green-50 text-green-600 border-green-100',
     gray: 'bg-gray-50 text-gray-600 border-gray-100',
   }
   return (

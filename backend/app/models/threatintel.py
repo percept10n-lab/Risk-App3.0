@@ -86,3 +86,53 @@ class ConnectorStatus(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class MonitoredIdentity(Base):
+    """Email address monitored for breach exposure."""
+    __tablename__ = "monitored_identities"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    label: Mapped[str | None] = mapped_column(String(200), nullable=True)  # e.g. "CTO", "Admin"
+    owner: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_checked: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    breach_count: Mapped[int] = mapped_column(Integer, default=0)
+    paste_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class BreachHit(Base):
+    """A single breach record linked to a monitored identity."""
+    __tablename__ = "breach_hits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    identity_id: Mapped[str] = mapped_column(String(36), index=True)
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    breach_name: Mapped[str] = mapped_column(String(200), index=True)
+    breach_title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    breach_domain: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    breach_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    added_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    data_classes: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=list)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False)
+    severity: Mapped[str] = mapped_column(String(20), default="medium", index=True)
+    source: Mapped[str] = mapped_column(String(50), default="HIBP")
+    provenance: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+
+class PasswordCheckResult(Base):
+    """Result of a password k-anonymity check (hash only, never the password)."""
+    __tablename__ = "password_check_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    sha1_prefix: Mapped[str] = mapped_column(String(5))
+    is_compromised: Mapped[bool] = mapped_column(Boolean, default=False)
+    occurrence_count: Mapped[int] = mapped_column(Integer, default=0)
+    checked_by: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())

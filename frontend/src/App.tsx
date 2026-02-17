@@ -21,6 +21,7 @@ import ThreatIntelLanding from './components/threatintel/ThreatIntelLanding'
 import VulnerabilitiesPage from './components/threatintel/VulnerabilitiesPage'
 import AdvisoriesPage from './components/threatintel/AdvisoriesPage'
 import SourcesPage from './components/threatintel/SourcesPage'
+import IdentityMonitorPage from './components/threatintel/IdentityMonitorPage'
 
 console.log('[App.tsx] Module loaded, all imports resolved')
 
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/intel/vulnerabilities" element={<VulnerabilitiesPage />} />
         <Route path="/intel/advisories" element={<AdvisoriesPage />} />
         <Route path="/intel/sources" element={<SourcesPage />} />
+        <Route path="/intel/identity-monitor" element={<IdentityMonitorPage />} />
       </Route>
     </Routes>
   )

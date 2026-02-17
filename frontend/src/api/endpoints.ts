@@ -159,6 +159,15 @@ export const threatIntelApi = {
   ingest: () => api.post('/threatintel/ingest'),
   ingestSingle: (connector: string) => api.post(`/threatintel/ingest/${connector}`),
   rebuildTriage: () => api.post('/threatintel/rebuild-triage'),
+  // Identity Monitor
+  identities: () => api.get('/threatintel/identities'),
+  addIdentity: (data: { email: string; label?: string; owner?: string }) => api.post('/threatintel/identities', data),
+  deleteIdentity: (id: string) => api.delete(`/threatintel/identities/${id}`),
+  identityBreaches: (id: string) => api.get(`/threatintel/identities/${id}/breaches`),
+  checkAllIdentities: () => api.post('/threatintel/identities/check-all'),
+  checkIdentity: (id: string) => api.post(`/threatintel/identities/${id}/check`),
+  identitySummary: () => api.get('/threatintel/identities/summary'),
+  passwordCheck: (sha1Hash: string) => api.post('/threatintel/password-check', { sha1_hash: sha1Hash }),
 }
 
 // Schedules

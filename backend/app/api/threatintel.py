@@ -7,15 +7,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
 
 from app.database import get_db
-from app.models.threatintel import CVEItem, AdvisoryItem, TriageItem, ConnectorStatus
+from app.models.threatintel import CVEItem, AdvisoryItem, TriageItem, ConnectorStatus, MonitoredIdentity
 from app.schemas.threatintel import (
     CVEItemResponse, AdvisoryItemResponse, TriageItemResponse,
     ConnectorStatusResponse, KeyCounters, ThreatIntelDashboard, IngestResult,
+    MonitoredIdentityCreate, MonitoredIdentityResponse, BreachHitResponse,
+    PasswordCheckRequest, PasswordCheckResponse, IdentitySummary, BreachCheckResult,
 )
 from app.schemas.common import PaginatedResponse
 from app.services.threatintel_service import (
     run_full_ingest, ingest_kev, ingest_epss, ingest_nvd, ingest_bsi,
     rebuild_triage, get_dashboard_data,
+)
+from app.services.identity_monitor_service import (
+    add_identity, remove_identity, list_identities, get_identity_breaches,
+    check_all_identities, check_single_identity, check_password_hash,
+    get_identity_summary,
 )
 
 router = APIRouter()
@@ -191,3 +198,82 @@ async def trigger_rebuild_triage(db: AsyncSession = Depends(get_db)):
     """Force rebuild triage scoring."""
     count = await rebuild_triage(db)
     return {"triage_items": count}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Identity Monitor endpoints
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/identities", response_model=list[MonitoredIdentityResponse])
+async def list_monitored_identities(db: AsyncSession = Depends(get_db)):
+    """List all monitored email identities."""
+    return await list_identities(db)
+
+
+@router.post("/identities", response_model=MonitoredIdentityResponse, status_code=201)
+async def add_monitored_identity(
+    body: MonitoredIdentityCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Add an email address to the monitored list."""
+    try:
+        return await add_identity(db, body.email, body.label, body.owner)
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+
+
+@router.delete("/identities/{identity_id}")
+async def delete_monitored_identity(identity_id: str, db: AsyncSession = Depends(get_db)):
+    """Remove a monitored identity and its breach records."""
+    removed = await remove_identity(db, identity_id)
+    if not removed:
+        raise HTTPException(404, "Identity not found")
+    return {"deleted": True}
+
+
+@router.get("/identities/{identity_id}/breaches", response_model=list[BreachHitResponse])
+async def get_identity_breach_hits(identity_id: str, db: AsyncSession = Depends(get_db)):
+    """Get all breach hits for a specific identity."""
+    return await get_identity_breaches(db, identity_id)
+
+
+@router.post("/identities/check-all", response_model=BreachCheckResult)
+async def check_all_monitored_identities(db: AsyncSession = Depends(get_db)):
+    """Run HIBP breach check on all monitored identities (rate-limited)."""
+    result = await check_all_identities(db)
+    return result
+
+
+@router.post("/identities/{identity_id}/check")
+async def check_single_monitored_identity(identity_id: str, db: AsyncSession = Depends(get_db)):
+    """Run HIBP breach check on a single identity."""
+    ident_result = await db.execute(
+        select(MonitoredIdentity).where(MonitoredIdentity.id == identity_id)
+    )
+    identity = ident_result.scalar_one_or_none()
+    if not identity:
+        raise HTTPException(404, "Identity not found")
+    result = await check_single_identity(db, identity)
+    return result
+
+
+@router.get("/identities/summary", response_model=IdentitySummary)
+async def get_identity_monitor_summary(db: AsyncSession = Depends(get_db)):
+    """Dashboard summary for identity monitoring."""
+    return await get_identity_summary(db)
+
+
+@router.post("/password-check", response_model=PasswordCheckResponse)
+async def check_password_exposure(
+    body: PasswordCheckRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Check if a password has been exposed using k-anonymity.
+    Client must send the SHA-1 hash of the password, never plaintext.
+    Only the first 5 chars of the hash are sent to HIBP.
+    """
+    if len(body.sha1_hash) != 40:
+        raise HTTPException(400, "Expected a 40-character SHA-1 hash")
+    result = await check_password_hash(db, body.sha1_hash)
+    return result
