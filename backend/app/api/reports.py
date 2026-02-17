@@ -40,7 +40,9 @@ async def generate_report(request: ReportGenerateRequest, db: AsyncSession = Dep
     # Gather all data
     summary = await report_service.get_summary(request.run_id)
 
-    assets_result = await db.execute(select(Asset).order_by(Asset.ip_address))
+    REPORT_LIMIT = 5000  # Safety cap per entity type
+
+    assets_result = await db.execute(select(Asset).order_by(Asset.ip_address).limit(REPORT_LIMIT))
     assets = [
         {
             "ip_address": a.ip_address, "hostname": a.hostname,
@@ -51,7 +53,7 @@ async def generate_report(request: ReportGenerateRequest, db: AsyncSession = Dep
         for a in assets_result.scalars().all()
     ]
 
-    findings_result = await db.execute(select(Finding).order_by(Finding.severity.desc()))
+    findings_result = await db.execute(select(Finding).order_by(Finding.severity.desc()).limit(REPORT_LIMIT))
     findings = [
         {
             "title": f.title, "severity": f.severity,
@@ -62,7 +64,7 @@ async def generate_report(request: ReportGenerateRequest, db: AsyncSession = Dep
         for f in findings_result.scalars().all()
     ]
 
-    risks_result = await db.execute(select(Risk).order_by(Risk.risk_level.desc()))
+    risks_result = await db.execute(select(Risk).order_by(Risk.risk_level.desc()).limit(REPORT_LIMIT))
     risks = [
         {
             "scenario": r.scenario, "likelihood": r.likelihood,
@@ -75,7 +77,7 @@ async def generate_report(request: ReportGenerateRequest, db: AsyncSession = Dep
         for r in risks_result.scalars().all()
     ]
 
-    mitre_result = await db.execute(select(MitreMapping))
+    mitre_result = await db.execute(select(MitreMapping).limit(REPORT_LIMIT))
     mitre_mappings = [
         {
             "technique_id": m.technique_id, "technique_name": m.technique_name,

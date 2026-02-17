@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, JSON, Text, Float, Integer, ForeignKey, func
+from sqlalchemy import String, DateTime, JSON, Text, Float, Integer, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 import enum
@@ -25,6 +25,10 @@ class FindingStatus(str, enum.Enum):
 
 class Finding(Base):
     __tablename__ = "findings"
+    __table_args__ = (
+        Index("idx_finding_asset_status", "asset_id", "status"),
+        Index("idx_finding_run_severity", "run_id", "severity"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("assets.id"), index=True)

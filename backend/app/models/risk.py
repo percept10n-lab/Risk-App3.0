@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, date
-from sqlalchemy import String, DateTime, Date, JSON, Text, ForeignKey, func
+from sqlalchemy import String, DateTime, Date, JSON, Text, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 import enum
@@ -53,11 +53,14 @@ class RiskStatus(str, enum.Enum):
 
 class Risk(Base):
     __tablename__ = "risks"
+    __table_args__ = (
+        Index("idx_risk_asset_level", "asset_id", "risk_level"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     asset_id: Mapped[str] = mapped_column(String(36), ForeignKey("assets.id"), index=True)
-    threat_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("threats.id"), nullable=True)
-    finding_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("findings.id"), nullable=True)
+    threat_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("threats.id"), nullable=True, index=True)
+    finding_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("findings.id"), nullable=True, index=True)
     scenario: Mapped[str] = mapped_column(Text)
     likelihood: Mapped[str] = mapped_column(String(20))
     likelihood_rationale: Mapped[str | None] = mapped_column(Text, nullable=True)

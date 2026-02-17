@@ -17,8 +17,8 @@ class MitreMapping(Base):
     __tablename__ = "mitre_mappings"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    finding_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("findings.id"), nullable=True)
-    threat_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("threats.id"), nullable=True)
+    finding_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("findings.id"), nullable=True, index=True)
+    threat_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("threats.id"), nullable=True, index=True)
     technique_id: Mapped[str] = mapped_column(String(20), index=True)
     technique_name: Mapped[str] = mapped_column(String(255))
     tactic: Mapped[str] = mapped_column(String(100))

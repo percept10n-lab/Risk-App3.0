@@ -109,100 +109,55 @@ class VulnScanService:
         network_reachable = await self._check_reachable(target)
 
         if network_reachable:
-            # HTTP checks
+            # Build list of all checks to run concurrently
+            check_tasks = []
+            check_labels = []
+
             http_ports = [p for p in open_ports if p in (80, 8080, 8000, 8008, 8888, 3000, 9090)]
             https_ports = [p for p in open_ports if p in (443, 8443, 4443)]
+            tls_ports = [p for p in open_ports if p in (443, 8443, 4443, 993, 995, 465, 636)]
+            mqtt_ports = [p for p in open_ports if p in (1883, 8883)]
 
             for port in http_ports:
-                try:
-                    findings = await self._run_http_check(target, port, use_tls=False)
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("HTTP check failed", target=target, port=port, error=str(e))
-
+                check_tasks.append(self._run_http_check(target, port, use_tls=False))
+                check_labels.append(f"HTTP:{port}")
             for port in https_ports:
-                try:
-                    findings = await self._run_http_check(target, port, use_tls=True)
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("HTTPS check failed", target=target, port=port, error=str(e))
-
-            # TLS checks
-            tls_ports = [p for p in open_ports if p in (443, 8443, 4443, 993, 995, 465, 636)]
+                check_tasks.append(self._run_http_check(target, port, use_tls=True))
+                check_labels.append(f"HTTPS:{port}")
             for port in tls_ports:
-                try:
-                    findings = await self._run_tls_check(target, port)
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("TLS check failed", target=target, port=port, error=str(e))
-
-            # SSH check
+                check_tasks.append(self._run_tls_check(target, port))
+                check_labels.append(f"TLS:{port}")
             if 22 in open_ports:
-                try:
-                    findings = await self._run_ssh_check(target, 22)
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("SSH check failed", target=target, error=str(e))
-
-            # DNS check
+                check_tasks.append(self._run_ssh_check(target, 22))
+                check_labels.append("SSH:22")
             if 53 in open_ports:
-                try:
-                    findings = await self._run_dns_check(target, 53)
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("DNS check failed", target=target, error=str(e))
-
-            # SNMP check
+                check_tasks.append(self._run_dns_check(target, 53))
+                check_labels.append("DNS:53")
             if 161 in open_ports:
-                try:
-                    findings = await asyncio.wait_for(
-                        self._run_snmp_check(target, 161), timeout=10
-                    )
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("SNMP check failed", target=target, error=str(e))
-
-            # SMB check
+                check_tasks.append(asyncio.wait_for(self._run_snmp_check(target, 161), timeout=10))
+                check_labels.append("SNMP:161")
             if 445 in open_ports:
-                try:
-                    findings = await asyncio.wait_for(
-                        self._run_smb_check(target, 445), timeout=10
-                    )
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("SMB check failed", target=target, error=str(e))
-
-            # Default credentials check (on HTTP ports)
-            for port in http_ports[:2]:  # Check first 2 HTTP ports max
-                try:
-                    device_type = asset.asset_type or "generic"
-                    findings = await asyncio.wait_for(
-                        self._run_default_creds_check(target, port, device_type), timeout=10
-                    )
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("Default creds check failed", target=target, port=port, error=str(e))
-
-            # mDNS/LLMNR check
+                check_tasks.append(asyncio.wait_for(self._run_smb_check(target, 445), timeout=10))
+                check_labels.append("SMB:445")
+            for port in http_ports[:2]:
+                device_type = asset.asset_type or "generic"
+                check_tasks.append(asyncio.wait_for(self._run_default_creds_check(target, port, device_type), timeout=10))
+                check_labels.append(f"Creds:{port}")
             if 5353 in open_ports:
-                try:
-                    findings = await asyncio.wait_for(
-                        self._run_mdns_llmnr_check(target), timeout=10
-                    )
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("mDNS/LLMNR check failed", target=target, error=str(e))
-
-            # MQTT check
-            mqtt_ports = [p for p in open_ports if p in (1883, 8883)]
+                check_tasks.append(asyncio.wait_for(self._run_mdns_llmnr_check(target), timeout=10))
+                check_labels.append("mDNS:5353")
             for port in mqtt_ports:
-                try:
-                    findings = await asyncio.wait_for(
-                        self._run_mqtt_check(target, port), timeout=10
-                    )
-                    raw_findings.extend(findings)
-                except Exception as e:
-                    logger.debug("MQTT check failed", target=target, port=port, error=str(e))
+                check_tasks.append(asyncio.wait_for(self._run_mqtt_check(target, port), timeout=10))
+                check_labels.append(f"MQTT:{port}")
+
+            # Run all checks concurrently
+            results = await asyncio.gather(*check_tasks, return_exceptions=True)
+
+            for label, result in zip(check_labels, results):
+                if isinstance(result, Exception):
+                    logger.warning("Check failed", target=target, check=label, error=str(result))
+                elif isinstance(result, list):
+                    raw_findings.extend(result)
         else:
             # Network not reachable - generate simulated findings from exposure profile
             logger.info("Target not reachable, generating simulated findings", target=target)

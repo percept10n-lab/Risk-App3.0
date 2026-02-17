@@ -1,6 +1,7 @@
 import asyncio
 import ipaddress
 import socket
+import subprocess
 import struct
 import json
 from datetime import datetime
@@ -251,12 +252,11 @@ class NetworkScanner:
                     else:
                         cmd = ["ping", "-c", "1", "-W", "1", ip]
 
-                    proc = await asyncio.create_subprocess_exec(
-                        *cmd,
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL,
+                    proc = await asyncio.to_thread(
+                        subprocess.run, cmd,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        timeout=3,
                     )
-                    await asyncio.wait_for(proc.wait(), timeout=3)
 
                     if proc.returncode == 0:
                         hostname = await asyncio.get_event_loop().run_in_executor(
@@ -266,7 +266,7 @@ class NetworkScanner:
                             ip_address=ip,
                             hostname=hostname,
                         ))
-                except (asyncio.TimeoutError, OSError):
+                except (subprocess.TimeoutExpired, OSError):
                     pass
 
         hosts = [str(ip) for ip in network.hosts()]

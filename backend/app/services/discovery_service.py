@@ -270,6 +270,21 @@ class DiscoveryService:
         updated = 0
         assets = []
 
+        # Batch-load existing assets by IP to avoid N+1 queries
+        all_ips = [
+            host.get("ip_address") or host.get("ip", "")
+            for host in discovered_hosts
+            if host.get("ip_address") or host.get("ip", "")
+        ]
+        existing_by_ip = {}
+        if all_ips:
+            from app.models.asset import Asset as AssetModel
+            result = await self.db.execute(
+                select(AssetModel).where(AssetModel.ip_address.in_(all_ips))
+            )
+            for a in result.scalars().all():
+                existing_by_ip[a.ip_address] = a
+
         for host in discovered_hosts:
             asset_data = {
                 "ip_address": host.get("ip_address") or host.get("ip", ""),
@@ -287,21 +302,29 @@ class DiscoveryService:
             if not asset_data["ip_address"]:
                 continue
 
-            existing = await self.asset_service.find_by_ip(asset_data["ip_address"])
-            if existing:
-                asset = await self.asset_service.upsert_from_scan(asset_data)
+            is_existing = asset_data["ip_address"] in existing_by_ip
+            asset = await self.asset_service.upsert_from_scan(asset_data)
+            if is_existing:
                 updated += 1
             else:
-                asset = await self.asset_service.upsert_from_scan(asset_data)
                 created += 1
             assets.append(asset)
 
-        # Enrich with mDNS data
+        # Enrich with mDNS data (batch lookup)
         if isinstance(mdns_results, list):
+            mdns_ips = [svc.get("ip") for svc in mdns_results if svc.get("ip")]
+            mdns_by_ip = {}
+            if mdns_ips:
+                from app.models.asset import Asset as AssetModel
+                result = await self.db.execute(
+                    select(AssetModel).where(AssetModel.ip_address.in_(mdns_ips))
+                )
+                for a in result.scalars().all():
+                    mdns_by_ip[a.ip_address] = a
             for svc in mdns_results:
                 ip = svc.get("ip")
                 if ip:
-                    existing = await self.asset_service.find_by_ip(ip)
+                    existing = mdns_by_ip.get(ip)
                     if existing and svc.get("hostname"):
                         if not existing.hostname:
                             existing.hostname = svc["hostname"].rstrip(".")

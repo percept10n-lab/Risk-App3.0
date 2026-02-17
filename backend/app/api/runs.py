@@ -189,8 +189,8 @@ async def _execute_pipeline(run_id: str, scope: dict):
                     run.steps_completed = completed_steps
                     run.completed_at = datetime.utcnow()
                     await db.commit()
-            except Exception:
-                pass
+            except Exception as mark_err:
+                logger.error("Failed to mark run as failed", run_id=run_id, error=str(mark_err))
 
 
 @router.get("", response_model=PaginatedResponse[RunResponse])
@@ -286,3 +286,20 @@ async def cancel_run(run_id: str, db: AsyncSession = Depends(get_db)):
 @router.post("/step/{step_name}")
 async def execute_step(step_name: str, run_id: str | None = None, db: AsyncSession = Depends(get_db)):
     return {"status": "accepted", "step": step_name, "message": f"Step '{step_name}' queued for execution"}
+
+
+async def mark_stale_runs():
+    """Mark any 'running' or 'pending' runs as failed on startup (server restart means they died)."""
+    async with async_session() as db:
+        result = await db.execute(
+            select(Run).where(Run.status.in_(["running", "pending"]))
+        )
+        stale_runs = result.scalars().all()
+        if not stale_runs:
+            return
+        for run in stale_runs:
+            run.status = "failed"
+            run.completed_at = datetime.utcnow()
+            logger.warning("Marked stale run as failed", run_id=run.id, previous_status=run.status)
+        await db.commit()
+        logger.info("Stale run cleanup complete", count=len(stale_runs))

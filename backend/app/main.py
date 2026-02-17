@@ -13,6 +13,7 @@ from app.api import (
     discovery, audit, artifacts, nmap, schedules
 )
 from app.services.scheduler_service import SchedulerService
+from app.api.runs import mark_stale_runs
 
 structlog.configure(
     processors=[
@@ -28,6 +29,12 @@ async def lifespan(app: FastAPI):
     logger.info("Starting application", version=settings.app_version)
     await init_db()
     os.makedirs(settings.artifacts_dir, exist_ok=True)
+
+    # Mark any runs left in running/pending state as failed (stale from previous crash)
+    try:
+        await mark_stale_runs()
+    except Exception as e:
+        logger.error("Stale run cleanup failed", error=str(e))
 
     # Start scheduler
     scheduler = SchedulerService()
