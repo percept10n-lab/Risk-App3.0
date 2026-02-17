@@ -9,6 +9,7 @@ import ThreatsPage from './components/threats/ThreatsPage'
 import RisksPage from './components/risks/RisksPage'
 import MitrePage from './components/mitre/MitrePage'
 import WorkflowPage from './components/workflow/WorkflowPage'
+import WorkflowRunnerPage from './components/workflow-runner/WorkflowRunnerPage'
 import PentestPage from './components/pentest/PentestPage'
 import NmapPage from './components/nmap/NmapPage'
 import VulnMgmtPage from './components/vulnmgmt/VulnMgmtPage'
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/risks" element={<RisksPage />} />
         <Route path="/mitre" element={<MitrePage />} />
         <Route path="/workflow" element={<WorkflowPage />} />
+        <Route path="/workflow-runner" element={<WorkflowRunnerPage />} />
         <Route path="/pentest" element={<PentestPage />} />
         <Route path="/nmap" element={<NmapPage />} />
         <Route path="/vulnmgmt" element={<VulnMgmtPage />} />
