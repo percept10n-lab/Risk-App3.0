@@ -40,6 +40,7 @@ const navItems = [
 ]
 
 export default function Sidebar() {
+  console.log('[Sidebar.tsx] Sidebar rendering, navItems:', navItems.length)
   const { sidebarOpen, toggleSidebar } = useUIStore()
 
   return (

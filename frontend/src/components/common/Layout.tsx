@@ -4,6 +4,7 @@ import { useUIStore } from '../../stores/uiStore'
 import Notifications from './Notifications'
 
 export default function Layout() {
+  console.log('[Layout.tsx] Layout rendering')
   const sidebarOpen = useUIStore((s) => s.sidebarOpen)
 
   return (

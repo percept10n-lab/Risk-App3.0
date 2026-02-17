@@ -18,7 +18,10 @@ import CopilotPage from './components/copilot/CopilotPage'
 import DriftPage from './components/drift/DriftPage'
 import SettingsPage from './components/settings/SettingsPage'
 
+console.log('[App.tsx] Module loaded, all imports resolved')
+
 export default function App() {
+  console.log('[App.tsx] App component rendering')
   return (
     <Routes>
       <Route element={<Layout />}>
