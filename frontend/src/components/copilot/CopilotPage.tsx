@@ -521,11 +521,11 @@ export default function CopilotPage() {
                       </div>
 
                       {/* Scan Results */}
-                      {verifyResult.scan_result?.findings?.length > 0 && (
+                      {(verifyResult.scan_result?.findings?.length ?? 0) > 0 && (
                         <div>
                           <h4 className="text-sm font-semibold text-gray-700 mb-2">Scan Findings</h4>
                           <div className="space-y-1">
-                            {verifyResult.scan_result.findings.map((f, i) => (
+                            {verifyResult.scan_result!.findings!.map((f, i) => (
                               <div key={i} className="flex items-center gap-2 text-xs p-2 bg-gray-50 rounded">
                                 <Badge variant={f.severity as any}>{f.severity}</Badge>
                                 <span>{f.title}</span>

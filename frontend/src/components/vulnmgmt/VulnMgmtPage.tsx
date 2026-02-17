@@ -18,6 +18,7 @@ interface FindingDetail {
   id: string; title: string; severity: string; category: string; status: string
   description?: string; remediation?: string; evidence?: string
   asset_id?: string; source_tool?: string; created_at?: string
+  cwe_id?: string; raw_output_snippet?: string
 }
 
 interface VulnMetrics {

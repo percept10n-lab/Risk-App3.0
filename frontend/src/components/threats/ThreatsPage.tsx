@@ -326,7 +326,7 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
                   <div className="flex flex-wrap gap-1">
                     {linkedFindings.map((f) => (
                       <span key={f.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 border rounded text-xs">
-                        <Badge variant={f.severity}>{f.severity}</Badge>
+                        <Badge variant={f.severity as any}>{f.severity}</Badge>
                         <span>{f.title}</span>
                       </span>
                     ))}

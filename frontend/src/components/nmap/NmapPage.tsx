@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import PageHeader from '../common/PageHeader'
 import NmapCommandBuilder from './NmapCommandBuilder'
 import NmapConsole from './NmapConsole'
-import NmapPipelineProgress, { DEFAULT_PIPELINE_STEPS, type PipelineStep } from './NmapPipelineProgress'
+import NmapPipelineProgress, { DEFAULT_PIPELINE_STEPS, type PipelineStep, type StepStatus } from './NmapPipelineProgress'
 import NmapResultsSummary from './NmapResultsSummary'
 import { nmapApi } from '../../api/endpoints'
 import { RotateCcw, AlertCircle } from 'lucide-react'
@@ -23,7 +23,7 @@ interface WsMessage {
   type: string
   line?: string
   step?: string
-  status?: string
+  status?: StepStatus
   detail?: string
   result?: PipelineResult
   error?: string
@@ -94,7 +94,7 @@ export default function NmapPage() {
         setPipelineSteps(prev =>
           prev.map(step =>
             step.id === msg.step
-              ? { ...step, status: msg.status, detail: msg.detail }
+              ? { ...step, status: msg.status || step.status, detail: msg.detail }
               : step
           )
         )
