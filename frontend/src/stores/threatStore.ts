@@ -42,7 +42,7 @@ export const useThreatStore = create<ThreatState>((set, get) => ({
         loading: false,
       })
     } catch (err: any) {
-      set({ error: err.message, loading: false })
+      set({ error: err.response?.data?.detail || err.message || 'Failed to fetch threats', loading: false })
     }
   },
 
@@ -51,7 +51,8 @@ export const useThreatStore = create<ThreatState>((set, get) => ({
       await threatsApi.delete(id)
       get().fetchThreats()
     } catch (err: any) {
-      set({ error: err.message })
+      set({ error: err.response?.data?.detail || err.message || 'Failed to delete threat' })
+      throw err
     }
   },
 

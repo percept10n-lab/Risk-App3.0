@@ -102,9 +102,15 @@ export const useRunStore = create<RunState>((set, get) => ({
   },
 
   startPolling: (runId: string) => {
+    if (!runId) return
     if (pollInterval) clearInterval(pollInterval)
     set({ polling: true })
     pollInterval = setInterval(() => {
+      const { activeRun } = get()
+      if (!activeRun || activeRun.id !== runId) {
+        get().stopPolling()
+        return
+      }
       get().fetchRun(runId)
     }, 2000)
   },

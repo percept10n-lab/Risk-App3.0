@@ -40,7 +40,7 @@ export default function DataTable<T extends Record<string, any>>({
   }
 
   return (
-    <div className="card overflow-hidden">
+    <div className="card overflow-hidden" role="region" aria-label="Data table">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
@@ -48,6 +48,7 @@ export default function DataTable<T extends Record<string, any>>({
               {columns.map((col) => (
                 <th
                   key={col.key}
+                  scope="col"
                   className={cn(
                     'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider',
                     col.className
@@ -63,6 +64,9 @@ export default function DataTable<T extends Record<string, any>>({
               <tr
                 key={item.id || idx}
                 onClick={() => onRowClick?.(item)}
+                onKeyDown={onRowClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(item) } } : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                role={onRowClick ? 'button' : undefined}
                 className={cn(
                   'hover:bg-gray-50 transition-colors',
                   onRowClick && 'cursor-pointer'

@@ -145,7 +145,8 @@ export default function AssetsPage() {
     try {
       const res = await assetsApi.deletePreview(asset.id)
       setDeletePreview(res.data)
-    } catch {
+    } catch (err: any) {
+      console.error('Failed to load delete preview:', err.message)
       setDeletePreview({ findings: '?', threats: '?', risks: '?', mitre_mappings: '?', vulnerabilities: '?' })
     }
   }
@@ -157,7 +158,9 @@ export default function AssetsPage() {
       await deleteAsset(deleteTargetAsset.id)
       setDeleteModalOpen(false)
       setDeleteTargetAsset(null)
-    } catch { /* empty */ }
+    } catch (err: any) {
+      console.error('Failed to delete asset:', err.message)
+    }
     setDeleteLoading(false)
   }
 

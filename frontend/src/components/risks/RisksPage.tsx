@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../common/PageHeader'
 import Pagination from '../common/Pagination'
@@ -92,12 +92,15 @@ export default function RisksPage() {
   }, [risks])
 
   // Group risks by asset
-  const risksByAsset: Record<string, Risk[]> = {}
-  risks.forEach((r) => {
-    const key = r.asset_id || 'unknown'
-    if (!risksByAsset[key]) risksByAsset[key] = []
-    risksByAsset[key].push(r)
-  })
+  const risksByAsset = useMemo(() => {
+    const grouped: Record<string, Risk[]> = {}
+    risks.forEach((r) => {
+      const key = r.asset_id || 'unknown'
+      if (!grouped[key]) grouped[key] = []
+      grouped[key].push(r)
+    })
+    return grouped
+  }, [risks])
 
   // --- Register Tab: expandable rows ---
   const toggleExpand = useCallback(async (riskId: string) => {
@@ -180,13 +183,16 @@ export default function RisksPage() {
   }
 
   // --- Summary cards ---
-  const riskCounts = { critical: 0, high: 0, medium: 0, low: 0 }
-  risks.forEach((r) => { if (r.risk_level in riskCounts) riskCounts[r.risk_level as keyof typeof riskCounts]++ })
+  const riskCounts = useMemo(() => {
+    const counts = { critical: 0, high: 0, medium: 0, low: 0 }
+    risks.forEach((r) => { if (r.risk_level in counts) counts[r.risk_level as keyof typeof counts]++ })
+    return counts
+  }, [risks])
 
   // --- Treatment buckets ---
-  const untreated = risks.filter((r) => ['identified', 'analyzed', 'evaluated'].includes(r.status))
-  const treated = risks.filter((r) => r.status === 'treated')
-  const monitoring = risks.filter((r) => r.status === 'monitoring')
+  const untreated = useMemo(() => risks.filter((r) => ['identified', 'analyzed', 'evaluated'].includes(r.status)), [risks])
+  const treated = useMemo(() => risks.filter((r) => r.status === 'treated'), [risks])
+  const monitoring = useMemo(() => risks.filter((r) => r.status === 'monitoring'), [risks])
 
   const tabs: Array<{ key: TabKey; label: string }> = [
     { key: 'register', label: 'Register' },

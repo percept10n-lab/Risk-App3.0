@@ -44,7 +44,7 @@ export const useFindingStore = create<FindingState>((set, get) => ({
         loading: false,
       })
     } catch (err: any) {
-      set({ error: err.message, loading: false })
+      set({ error: err.response?.data?.detail || err.message || 'Failed to fetch findings', loading: false })
     }
   },
 
@@ -54,7 +54,7 @@ export const useFindingStore = create<FindingState>((set, get) => ({
       const response = await findingsApi.get(id)
       set({ selectedFinding: response.data, loading: false })
     } catch (err: any) {
-      set({ error: err.message, loading: false })
+      set({ error: err.response?.data?.detail || err.message || 'Failed to fetch finding', loading: false })
     }
   },
 

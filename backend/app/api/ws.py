@@ -30,7 +30,8 @@ class ConnectionManager:
             for connection in self.active_connections[run_id]:
                 try:
                     await connection.send_json(message)
-                except Exception:
+                except Exception as e:
+                    logger.warning("WebSocket broadcast failed", run_id=run_id, error=str(e))
                     disconnected.append(connection)
             for conn in disconnected:
                 self.active_connections[run_id].discard(conn)
@@ -45,7 +46,11 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str):
     try:
         while True:
             data = await websocket.receive_text()
-            message = json.loads(data)
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError:
+                await websocket.send_json({"type": "error", "detail": "Invalid JSON"})
+                continue
             if message.get("type") == "ping":
                 await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:

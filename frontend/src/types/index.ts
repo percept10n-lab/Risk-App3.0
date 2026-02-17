@@ -76,6 +76,13 @@ export interface Threat {
   updated_at: string
 }
 
+// Threat with enrichment data from API
+export interface EnrichedThreat extends Threat {
+  asset?: { id: string; hostname: string | null; ip_address: string } | null
+  mitre_techniques?: Array<{ technique_id: string; technique_name: string; tactic: string }> | null
+  linked_findings?: Array<{ id: string; title: string; severity: string }> | null
+}
+
 // Risk
 export interface Risk {
   id: string

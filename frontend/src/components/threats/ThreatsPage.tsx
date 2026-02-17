@@ -6,7 +6,7 @@ import { useThreatStore } from '../../stores/threatStore'
 import { useAssetStore } from '../../stores/assetStore'
 import { threatsApi } from '../../api/endpoints'
 import { formatRelativeTime } from '../../utils/format'
-import type { Threat } from '../../types'
+import type { Threat, EnrichedThreat } from '../../types'
 import {
   ChevronDown,
   ChevronRight,
@@ -225,14 +225,14 @@ function ThreatsTab() {
 }
 
 function ThreatRow({ threat, expanded, onToggle, onDelete }: {
-  threat: any
+  threat: EnrichedThreat
   expanded: boolean
   onToggle: () => void
   onDelete: () => void
 }) {
-  const mitreTechniques: any[] = threat.mitre_techniques || []
-  const linkedFindings: any[] = threat.linked_findings || []
-  const asset: any = threat.asset || null
+  const mitreTechniques = threat.mitre_techniques || []
+  const linkedFindings = threat.linked_findings || []
+  const asset = threat.asset || null
 
   return (
     <>
@@ -263,7 +263,7 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
         <td className="px-4 py-3">
           {mitreTechniques.length > 0 ? (
             <div className="flex flex-wrap gap-1">
-              {mitreTechniques.slice(0, 2).map((m: any) => (
+              {mitreTechniques.slice(0, 2).map((m) => (
                 <span key={m.technique_id} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-mono">
                   {m.technique_id}
                 </span>
@@ -324,9 +324,9 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
                 <div>
                   <p className="font-medium text-gray-700 mb-1">Linked Findings</p>
                   <div className="flex flex-wrap gap-1">
-                    {linkedFindings.map((f: any) => (
+                    {linkedFindings.map((f) => (
                       <span key={f.id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 border rounded text-xs">
-                        <Badge variant={f.severity as any}>{f.severity}</Badge>
+                        <Badge variant={f.severity}>{f.severity}</Badge>
                         <span>{f.title}</span>
                       </span>
                     ))}
@@ -349,7 +349,7 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
                 <div>
                   <p className="font-medium text-gray-700 mb-1">MITRE ATT&CK Techniques</p>
                   <div className="flex flex-wrap gap-1">
-                    {mitreTechniques.map((m: any) => (
+                    {mitreTechniques.map((m) => (
                       <span key={m.technique_id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs">
                         <span className="font-mono font-medium">{m.technique_id}</span>
                         <span className="text-purple-500">{m.technique_name}</span>
