@@ -38,7 +38,9 @@ async def get_artifact_content(artifact_id: str, db: AsyncSession = Depends(get_
         return {"content": artifact.content, "content_hash": artifact.content_hash}
 
     store = ArtifactStore(db)
-    file_path = store.storage_path / artifact.filename
+    file_path = (store.storage_path / artifact.filename).resolve()
+    if not str(file_path).startswith(str(store.storage_path.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
     if file_path.exists():
         return {"content": file_path.read_text(encoding="utf-8"), "content_hash": artifact.content_hash}
 

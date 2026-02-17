@@ -99,6 +99,7 @@ class MQTTChecker:
 
     async def _check_anonymous(self, target: str, port: int, use_tls: bool, timeout: int) -> bool:
         """Try connecting to MQTT broker without credentials."""
+        writer = None
         try:
             if use_tls:
                 ssl_ctx = ssl.create_default_context()
@@ -121,21 +122,22 @@ class MQTTChecker:
 
             # Read CONNACK response
             response = await asyncio.wait_for(reader.read(256), timeout=timeout)
-            writer.close()
-            await writer.wait_closed()
 
             if response and len(response) >= 4:
-                # CONNACK: byte 0 = 0x20, byte 1 = remaining length (2)
-                # byte 3 = return code (0 = accepted)
                 if response[0] == 0x20 and response[3] == 0x00:
                     return True
 
             return False
         except Exception:
             return False
+        finally:
+            if writer:
+                writer.close()
+                await writer.wait_closed()
 
     async def _check_sys_topics(self, target: str, port: int, use_tls: bool, timeout: int) -> str | None:
         """Try subscribing to $SYS/# topics."""
+        writer = None
         try:
             if use_tls:
                 ssl_ctx = ssl.create_default_context()
@@ -156,8 +158,6 @@ class MQTTChecker:
             await writer.drain()
             connack = await asyncio.wait_for(reader.read(256), timeout=5)
             if not connack or len(connack) < 4 or connack[3] != 0x00:
-                writer.close()
-                await writer.wait_closed()
                 return None
 
             # SUBSCRIBE to $SYS/#
@@ -169,19 +169,17 @@ class MQTTChecker:
             try:
                 data = await asyncio.wait_for(reader.read(1024), timeout=3)
                 if data and len(data) > 5:
-                    # Try to extract readable content
-                    text = data.decode("utf-8", errors="replace")
-                    writer.close()
-                    await writer.wait_closed()
-                    return text
+                    return data.decode("utf-8", errors="replace")
             except asyncio.TimeoutError:
                 pass
 
-            writer.close()
-            await writer.wait_closed()
             return None
         except Exception:
             return None
+        finally:
+            if writer:
+                writer.close()
+                await writer.wait_closed()
 
     async def _check_port_open(self, target: str, port: int, timeout: int) -> bool:
         """Quick port check."""

@@ -220,7 +220,9 @@ async def download_report(report_id: str, db: AsyncSession = Depends(get_db)):
     report_type = artifact.parameters.get("report_type", "html")
 
     # Try file first, then DB content
-    file_path = Path(settings.artifacts_dir) / artifact.filename
+    file_path = (Path(settings.artifacts_dir) / artifact.filename).resolve()
+    if not str(file_path).startswith(str(Path(settings.artifacts_dir).resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
     if file_path.exists():
         content = file_path.read_text(encoding="utf-8")
     elif artifact.content:

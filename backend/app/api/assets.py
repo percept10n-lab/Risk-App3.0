@@ -93,7 +93,10 @@ async def list_assets(
         query = query.where(Asset.criticality == criticality)
         count_query = count_query.where(Asset.criticality == criticality)
     if search:
-        search_filter = Asset.hostname.ilike(f"%{search}%") | Asset.ip_address.ilike(f"%{search}%")
+        if len(search) > 100:
+            raise HTTPException(status_code=400, detail="Search term too long (max 100 chars)")
+        safe_search = search.replace("%", "\\%").replace("_", "\\_")
+        search_filter = Asset.hostname.ilike(f"%{safe_search}%") | Asset.ip_address.ilike(f"%{safe_search}%")
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
 

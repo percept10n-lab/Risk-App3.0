@@ -124,9 +124,10 @@ class SMBChecker:
         return await loop.run_in_executor(None, self._send_negotiate, target, port)
 
     def _send_negotiate(self, target: str, port: int) -> bytes | None:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
+        sock = None
         try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
             sock.connect((target, port))
             sock.sendall(SMB1_NEGOTIATE)
             data = sock.recv(4096)
@@ -134,7 +135,8 @@ class SMBChecker:
         except (socket.timeout, ConnectionRefusedError, OSError):
             return None
         finally:
-            sock.close()
+            if sock:
+                sock.close()
 
     def _detect_smbv1(self, response: bytes) -> bool:
         """Check if response indicates SMBv1 support."""
@@ -163,9 +165,10 @@ class SMBChecker:
 
     def _attempt_null_session(self, target: str, port: int) -> bool:
         """Try to establish a null session via SMB."""
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
+        sock = None
         try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
             sock.connect((target, port))
             # Send negotiate
             sock.sendall(SMB1_NEGOTIATE)
@@ -213,4 +216,5 @@ class SMBChecker:
         except (socket.timeout, ConnectionRefusedError, OSError):
             return False
         finally:
-            sock.close()
+            if sock:
+                sock.close()

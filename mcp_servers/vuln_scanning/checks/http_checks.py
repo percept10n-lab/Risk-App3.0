@@ -130,14 +130,16 @@ class HTTPSecurityChecker:
                 asyncio.open_connection(target, port), timeout=10
             )
 
-        request = f"HEAD / HTTP/1.1\r\nHost: {target}\r\nConnection: close\r\nUser-Agent: RiskPlatform/1.0\r\n\r\n"
-        writer.write(request.encode())
-        await writer.drain()
+        try:
+            request = f"HEAD / HTTP/1.1\r\nHost: {target}\r\nConnection: close\r\nUser-Agent: RiskPlatform/1.0\r\n\r\n"
+            writer.write(request.encode())
+            await writer.drain()
 
-        data = await asyncio.wait_for(reader.read(8192), timeout=10)
-        response = data.decode("utf-8", errors="replace")
-        writer.close()
-        await writer.wait_closed()
+            data = await asyncio.wait_for(reader.read(8192), timeout=10)
+            response = data.decode("utf-8", errors="replace")
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
         headers = {}
         server_header = None

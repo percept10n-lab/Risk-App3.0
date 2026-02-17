@@ -66,6 +66,9 @@ export default function RisksPage() {
   const [treatmentContext, setTreatmentContext] = useState<any>(null)
   const [treatmentContextLoading, setTreatmentContextLoading] = useState(false)
 
+  // Error state for user feedback
+  const [actionError, setActionError] = useState<string | null>(null)
+
   // Asset cache for register grouping
   const [assetCache, setAssetCache] = useState<Record<string, { hostname: string | null; ip_address: string }>>({})
 
@@ -106,7 +109,9 @@ export default function RisksPage() {
     try {
       const res = await risksApi.getFullContext(riskId)
       setExpandedRisks((prev) => ({ ...prev, [riskId]: res.data }))
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || 'Failed to load risk details')
+    }
     setExpandedLoading((prev) => ({ ...prev, [riskId]: false }))
   }, [expandedRisks])
 
@@ -116,7 +121,9 @@ export default function RisksPage() {
     try {
       const res = await risksApi.matrix()
       setMatrixData(res.data)
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || 'Failed to load risk matrix')
+    }
     setMatrixLoading(false)
   }, [])
 
@@ -143,7 +150,9 @@ export default function RisksPage() {
     try {
       const res = await risksApi.getFullContext(riskId)
       setAnalysisExpanded((prev) => ({ ...prev, [riskId]: res.data }))
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || 'Failed to load risk details')
+    }
     setAnalysisExpandLoading((prev) => ({ ...prev, [riskId]: false }))
   }, [analysisExpanded])
 
@@ -164,7 +173,9 @@ export default function RisksPage() {
       fetchRisks({ include_asset: true })
       // Refresh matrix if loaded
       if (matrixData) loadMatrix()
-    } catch { /* empty */ }
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || 'Failed to save treatment')
+    }
     setTreatmentSaving(false)
   }
 
@@ -196,6 +207,14 @@ export default function RisksPage() {
           </button>
         }
       />
+
+      {/* Error banner */}
+      {actionError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+          <span className="text-sm text-red-700">{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600 text-sm ml-4">Dismiss</button>
+        </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -726,7 +745,7 @@ export default function RisksPage() {
                     setTreatmentForm({ treatment: 'mitigate', treatment_plan: '', treatment_measures: [], treatment_owner: '', treatment_due_date: '', residual_risk_level: '' })
                     setTreatmentContext(null)
                     setTreatmentContextLoading(true)
-                    try { const res = await risksApi.getFullContext(r.id); setTreatmentContext(res.data) } catch { /* empty */ }
+                    try { const res = await risksApi.getFullContext(r.id); setTreatmentContext(res.data) } catch (err: any) { setActionError(err.response?.data?.detail || 'Failed to load context') }
                     setTreatmentContextLoading(false)
                   }} />
                 ))}
@@ -754,7 +773,7 @@ export default function RisksPage() {
                     })
                     setTreatmentContext(null)
                     setTreatmentContextLoading(true)
-                    try { const res = await risksApi.getFullContext(r.id); setTreatmentContext(res.data) } catch { /* empty */ }
+                    try { const res = await risksApi.getFullContext(r.id); setTreatmentContext(res.data) } catch (err: any) { setActionError(err.response?.data?.detail || 'Failed to load context') }
                     setTreatmentContextLoading(false)
                   }} />
                 ))}

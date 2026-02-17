@@ -134,13 +134,14 @@ class TLSChecker:
             asyncio.open_connection(target, port, ssl=ctx), timeout=10
         )
 
-        ssl_obj = writer.get_extra_info("ssl_object")
-        cert = ssl_obj.getpeercert(binary_form=False) if ssl_obj else {}
-        protocol = ssl_obj.version() if ssl_obj else ""
-        cipher = ssl_obj.cipher() if ssl_obj else ()
-
-        writer.close()
-        await writer.wait_closed()
+        try:
+            ssl_obj = writer.get_extra_info("ssl_object")
+            cert = ssl_obj.getpeercert(binary_form=False) if ssl_obj else {}
+            protocol = ssl_obj.version() if ssl_obj else ""
+            cipher = ssl_obj.cipher() if ssl_obj else ()
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
         raw = f"Protocol: {protocol}, Cipher: {cipher}, Cert: {cert}"
         return cert or {}, protocol or "", cipher or (), raw

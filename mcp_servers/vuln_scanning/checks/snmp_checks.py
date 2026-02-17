@@ -89,16 +89,18 @@ class SNMPChecker:
         message_content = version + community_tlv + pdu
         message = b"\x30" + bytes([len(message_content)]) + message_content
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(3)
+        sock = None
         try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(3)
             sock.sendto(message, (target, port))
             data, _ = sock.recvfrom(4096)
             return data
         except socket.timeout:
             return None
         finally:
-            sock.close()
+            if sock:
+                sock.close()
 
     def _extract_string(self, response: bytes) -> str | None:
         """Try to extract a readable string from SNMP response."""

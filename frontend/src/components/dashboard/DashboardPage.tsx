@@ -39,12 +39,13 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const [assetsRes, findingsRes, risksRes, threatsRes, findingsDetailRes] = await Promise.allSettled([
+        const [assetsRes, findingsRes, risksRes, threatsRes, findingsDetailRes, risksDetailRes] = await Promise.allSettled([
           api.get('/assets', { params: { page_size: 1 } }),
           api.get('/findings', { params: { page_size: 1 } }),
           api.get('/risks', { params: { page_size: 1 } }),
           api.get('/threats', { params: { page_size: 1 } }),
           api.get('/findings', { params: { page_size: 10 } }),
+          api.get('/risks', { params: { page_size: 100 } }),
         ])
 
         const findingsAll = findingsDetailRes.status === 'fulfilled' ? findingsDetailRes.value.data.items || [] : []
@@ -54,14 +55,11 @@ export default function DashboardPage() {
           findingsBySeverity[f.severity] = (findingsBySeverity[f.severity] || 0) + 1
         })
 
-        let risksByLevel: Record<string, number> = {}
-        try {
-          const risksDetailRes = await api.get('/risks', { params: { page_size: 100 } })
-          const allRisks = risksDetailRes.data.items || []
-          allRisks.forEach((r: any) => {
-            risksByLevel[r.risk_level] = (risksByLevel[r.risk_level] || 0) + 1
-          })
-        } catch { /* empty */ }
+        const risksByLevel: Record<string, number> = {}
+        const allRisks = risksDetailRes.status === 'fulfilled' ? risksDetailRes.value.data.items || [] : []
+        allRisks.forEach((r: any) => {
+          risksByLevel[r.risk_level] = (risksByLevel[r.risk_level] || 0) + 1
+        })
 
         setStats({
           total_assets: assetsRes.status === 'fulfilled' ? assetsRes.value.data.total : 0,

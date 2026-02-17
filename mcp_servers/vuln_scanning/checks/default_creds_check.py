@@ -112,6 +112,7 @@ class DefaultCredsChecker:
             f"\r\n"
         )
 
+        writer = None
         try:
             if use_tls:
                 ssl_ctx = ssl.create_default_context()
@@ -131,24 +132,22 @@ class DefaultCredsChecker:
             await writer.drain()
 
             response = await asyncio.wait_for(reader.read(2048), timeout=5)
-            writer.close()
-            await writer.wait_closed()
 
             response_str = response.decode("utf-8", errors="replace")
             first_line = response_str.split("\r\n")[0] if response_str else ""
 
-            # Check if response is 200 OK (credentials accepted)
-            # 401 = unauthorized, 403 = forbidden (both mean creds failed)
             if "200" in first_line:
-                # Additional check: make sure it's not just a public page
-                # Try without auth to see if we get the same response
                 no_auth_status = await self._check_without_auth(target, port, use_tls)
                 if no_auth_status == 401 or no_auth_status == 403:
-                    return True  # Auth was required and our creds worked
+                    return True
 
             return False
         except Exception:
             return False
+        finally:
+            if writer:
+                writer.close()
+                await writer.wait_closed()
 
     async def _check_without_auth(self, target: str, port: int, use_tls: bool) -> int:
         """Send request without auth to check if auth is required."""
@@ -158,6 +157,7 @@ class DefaultCredsChecker:
             f"Connection: close\r\n"
             f"\r\n"
         )
+        writer = None
         try:
             if use_tls:
                 ssl_ctx = ssl.create_default_context()
@@ -176,8 +176,6 @@ class DefaultCredsChecker:
             writer.write(request.encode())
             await writer.drain()
             response = await asyncio.wait_for(reader.read(1024), timeout=5)
-            writer.close()
-            await writer.wait_closed()
 
             first_line = response.decode("utf-8", errors="replace").split("\r\n")[0]
             if "401" in first_line:
@@ -189,3 +187,7 @@ class DefaultCredsChecker:
             return 0
         except Exception:
             return 0
+        finally:
+            if writer:
+                writer.close()
+                await writer.wait_closed()

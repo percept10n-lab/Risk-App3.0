@@ -49,8 +49,27 @@ export default function AssetsPage() {
     setDiscoveryCidr('')
   }
 
+  const validateCIDR = (cidr: string): string | null => {
+    const match = cidr.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/)
+    if (!match) return 'Invalid IP address or CIDR notation (e.g. 192.168.1.0/24)'
+    for (let i = 1; i <= 4; i++) {
+      const octet = parseInt(match[i])
+      if (octet < 0 || octet > 255) return `Invalid octet: ${match[i]} (must be 0-255)`
+    }
+    if (match[6] !== undefined) {
+      const prefix = parseInt(match[6])
+      if (prefix < 0 || prefix > 32) return `Invalid prefix length: /${match[6]} (must be 0-32)`
+    }
+    return null
+  }
+
   const startDiscovery = async () => {
     if (!discoveryCidr) return
+    const validationError = validateCIDR(discoveryCidr)
+    if (validationError) {
+      setDiscoveryResult({ status: 'error', error: validationError })
+      return
+    }
     setDiscoveryLoading(true)
     setDiscoveryResult(null)
     setThreatResult(null)
@@ -99,6 +118,11 @@ export default function AssetsPage() {
 
   const startRefresh = async () => {
     if (!refreshCidr) return
+    const validationError = validateCIDR(refreshCidr)
+    if (validationError) {
+      setRefreshResult({ status: 'error', error: validationError })
+      return
+    }
     setRefreshLoading(true)
     setRefreshResult(null)
     try {

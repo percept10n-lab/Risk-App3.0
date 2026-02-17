@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,7 @@ from sqlalchemy import select
 
 from app.database import get_db, async_session
 from app.models.finding import Finding
+from app.models.run import Run
 from app.services.nmap_service import NmapService
 import structlog
 
@@ -36,11 +38,13 @@ async def _run_pipeline_background(target: str, nmap_args: str, run_id: str, tim
                     "status": "error",
                     "error": f"Target {target} is outside allowed scope (RFC 1918 only)",
                 }
+                await _mark_run_status(run_id, "failed")
                 return
 
             valid, msg = service.validate_nmap_args(nmap_args)
             if not valid:
                 _pipeline_status[run_id] = {"status": "error", "error": f"Invalid nmap arguments: {msg}"}
+                await _mark_run_status(run_id, "failed")
                 return
 
             result = await service.run_full_pipeline(target, nmap_args, run_id, timeout)
@@ -54,9 +58,11 @@ async def _run_pipeline_background(target: str, nmap_args: str, run_id: str, tim
                     "assets_updated": result.get("import_result", {}).get("updated", 0),
                 },
             }
+            await _mark_run_status(run_id, "completed")
     except Exception as e:
         logger.error("Background pipeline failed", run_id=run_id, error=str(e))
         _pipeline_status[run_id] = {"status": "error", "error": str(e)}
+        await _mark_run_status(run_id, "failed")
 
 
 async def _run_scan_only_background(target: str, nmap_args: str, run_id: str, timeout: int):
@@ -76,9 +82,26 @@ async def _run_scan_only_background(target: str, nmap_args: str, run_id: str, ti
                 },
                 "error": result.get("error"),
             }
+            await _mark_run_status(run_id, "completed")
     except Exception as e:
         logger.error("Background scan failed", run_id=run_id, error=str(e))
         _pipeline_status[run_id] = {"status": "error", "error": str(e)}
+        await _mark_run_status(run_id, "failed")
+
+
+async def _mark_run_status(run_id: str, status: str):
+    """Update the Run record status in the DB."""
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(Run).where(Run.id == run_id))
+            run = result.scalar_one_or_none()
+            if run:
+                run.status = status
+                if status in ("completed", "failed"):
+                    run.completed_at = datetime.utcnow()
+                await db.commit()
+    except Exception as e:
+        logger.error("Failed to update run status", run_id=run_id, error=str(e))
 
 
 @router.post("/scan")
