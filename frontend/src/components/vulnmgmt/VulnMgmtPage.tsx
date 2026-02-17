@@ -48,7 +48,7 @@ export default function VulnMgmtPage() {
       if (metricsRes.status === 'fulfilled') {
         setMetrics(metricsRes.value.data)
       }
-    } catch { /* empty */ }
+    } catch (err: any) { console.error('Failed to load vuln data:', err.message) }
     setLoading(false)
   }
 
@@ -59,7 +59,7 @@ export default function VulnMgmtPage() {
       setFindings((prev) =>
         prev.map((f) => (f.id === findingId ? { ...f, status: newStatus } : f))
       )
-    } catch { /* empty */ }
+    } catch (err: any) { console.error('Failed to update finding status:', err.message) }
     setUpdating(null)
   }
 
@@ -74,7 +74,7 @@ export default function VulnMgmtPage() {
       try {
         const res = await api.get(`/findings/${findingId}/context`)
         setContextCache((prev) => ({ ...prev, [findingId]: res.data }))
-      } catch { /* empty */ }
+      } catch (err: any) { console.error('Failed to load finding context:', err.message) }
       setContextLoading(null)
     }
   }

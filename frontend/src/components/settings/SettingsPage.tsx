@@ -153,7 +153,7 @@ export default function SettingsPage() {
     try {
       await settingsApi.updatePolicy({ ...policy, is_default: true })
       flash('Policy saved')
-    } catch { flash('Failed to save policy') }
+    } catch (err: any) { console.error('Failed to save policy:', err.message); flash('Failed to save policy') }
     setSaving(false)
   }
 
@@ -166,7 +166,7 @@ export default function SettingsPage() {
         model: aiConfig.model,
       })
       flash('AI config saved')
-    } catch { flash('Failed to save AI config') }
+    } catch (err: any) { console.error('Failed to save AI config:', err.message); flash('Failed to save AI config') }
     setSaving(false)
   }
 
@@ -176,7 +176,8 @@ export default function SettingsPage() {
     try {
       const res = await settingsApi.getAiConfig()
       setConnectionStatus(res.data.enabled ? 'ok' : 'fail')
-    } catch {
+    } catch (err: any) {
+      console.error('Connection test failed:', err.message)
       setConnectionStatus('fail')
     }
     setTestingConnection(false)
@@ -256,7 +257,7 @@ export default function SettingsPage() {
       setScheduleModalOpen(false)
       fetchSchedules()
       flash(editingSchedule ? 'Schedule updated' : 'Schedule created')
-    } catch { flash('Failed to save schedule') }
+    } catch (err: any) { console.error('Failed to save schedule:', err.message); flash('Failed to save schedule') }
     setSaving(false)
   }
 
@@ -264,7 +265,7 @@ export default function SettingsPage() {
     try {
       await schedulesApi.toggle(id)
       fetchSchedules()
-    } catch { flash('Failed to toggle schedule') }
+    } catch (err: any) { console.error('Failed to toggle schedule:', err.message); flash('Failed to toggle schedule') }
   }
 
   async function handleDeleteSchedule(id: string) {
@@ -272,7 +273,7 @@ export default function SettingsPage() {
       await schedulesApi.delete(id)
       fetchSchedules()
       flash('Schedule deleted')
-    } catch { flash('Failed to delete schedule') }
+    } catch (err: any) { console.error('Failed to delete schedule:', err.message); flash('Failed to delete schedule') }
   }
 
   async function handleRunNow(id: string) {
@@ -280,7 +281,7 @@ export default function SettingsPage() {
       await schedulesApi.runNow(id)
       flash('Scan triggered')
       setTimeout(fetchSchedules, 2000)
-    } catch { flash('Failed to trigger scan') }
+    } catch (err: any) { console.error('Failed to trigger scan:', err.message); flash('Failed to trigger scan') }
   }
 
   return (

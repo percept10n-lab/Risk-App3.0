@@ -69,7 +69,7 @@ export default function DriftPage() {
       if (baselinesRes.status === 'fulfilled') {
         setBaselines(baselinesRes.value.data.baselines || [])
       }
-    } catch { /* empty */ }
+    } catch (err: any) { console.error('Failed to load drift data:', err.message) }
     setLoading(false)
   }
 
@@ -82,7 +82,7 @@ export default function DriftPage() {
       })
       setShowBaselineForm(false)
       await loadData()
-    } catch { /* empty */ }
+    } catch (err: any) { console.error('Failed to create baseline:', err.message) }
     setCreating(false)
   }
 

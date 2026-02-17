@@ -45,8 +45,17 @@ async def list_audit_events(
 
 
 @router.get("/trail/{run_id}")
-async def get_audit_trail(run_id: str, db: AsyncSession = Depends(get_db)):
-    query = select(AuditEvent).where(AuditEvent.run_id == run_id).order_by(AuditEvent.timestamp.asc())
+async def get_audit_trail(
+    run_id: str,
+    limit: int = Query(10000, ge=1, le=50000),
+    db: AsyncSession = Depends(get_db),
+):
+    query = (
+        select(AuditEvent)
+        .where(AuditEvent.run_id == run_id)
+        .order_by(AuditEvent.timestamp.asc())
+        .limit(limit)
+    )
     result = await db.execute(query)
     events = result.scalars().all()
     return {"run_id": run_id, "events": [AuditEventResponse.model_validate(e) for e in events]}

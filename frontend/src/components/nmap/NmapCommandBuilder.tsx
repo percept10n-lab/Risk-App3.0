@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAssetStore } from '../../stores/assetStore'
-import { ChevronDown, X, Terminal, Code2, Sliders } from 'lucide-react'
+import { ChevronDown, X, Terminal, Code2, Sliders, AlertTriangle } from 'lucide-react'
 
 interface NmapCommandBuilderProps {
   onStart: (target: string, nmapArgs: string, autoPipeline: boolean, timeout: number) => void
@@ -74,6 +74,7 @@ export default function NmapCommandBuilder({ onStart, disabled }: NmapCommandBui
 
   // Raw mode state
   const [rawArgs, setRawArgs] = useState('')
+  const [validationError, setValidationError] = useState<string | null>(null)
 
   useEffect(() => { fetchAssets() }, [])
 
@@ -124,8 +125,31 @@ export default function NmapCommandBuilder({ onStart, disabled }: NmapCommandBui
   const commandPreview = `nmap ${effectiveArgs} ${target || '<target>'}`
   const canStart = !!target && !disabled
 
+  const validateTarget = (t: string): string | null => {
+    const match = t.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/)
+    if (!match) return 'Invalid IP address or CIDR notation'
+    for (let i = 1; i <= 4; i++) {
+      const octet = parseInt(match[i])
+      if (octet < 0 || octet > 255) return `Invalid octet: ${match[i]}`
+    }
+    if (match[6] !== undefined) {
+      const prefix = parseInt(match[6])
+      if (prefix < 0 || prefix > 32) return `Invalid prefix length: /${match[6]}`
+    }
+    return null
+  }
+
   const handleStart = () => {
     if (!canStart) return
+    // Skip validation if target comes from a registered asset
+    if (!selectedAssetId) {
+      const err = validateTarget(target)
+      if (err) {
+        setValidationError(err)
+        return
+      }
+    }
+    setValidationError(null)
     onStart(target, effectiveArgs, autoPipeline, timeout)
   }
 
@@ -453,6 +477,14 @@ export default function NmapCommandBuilder({ onStart, disabled }: NmapCommandBui
         </div>
         <code className="text-green-400 text-sm font-mono break-all">$ {commandPreview}</code>
       </div>
+
+      {/* Validation Error */}
+      {validationError && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          {validationError}
+        </div>
+      )}
 
       {/* Start Button */}
       <button

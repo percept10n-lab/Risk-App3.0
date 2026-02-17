@@ -105,7 +105,7 @@ export default function ReportsPage() {
       a.download = `security-report.${ext}`
       a.click()
       URL.revokeObjectURL(url)
-    } catch { /* empty */ }
+    } catch (err: any) { console.error('Failed to download report:', err.message) }
   }
 
   const handlePreview = async (reportId: string) => {
@@ -114,7 +114,7 @@ export default function ReportsPage() {
       const blob = new Blob([res.data], { type: 'text/html' })
       const url = URL.createObjectURL(blob)
       window.open(url, '_blank')
-    } catch { /* empty */ }
+    } catch (err: any) { console.error('Failed to preview report:', err.message) }
   }
 
   const reportTypes = [

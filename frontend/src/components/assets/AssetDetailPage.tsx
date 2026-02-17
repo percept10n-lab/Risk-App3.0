@@ -28,7 +28,8 @@ export default function AssetDetailPage() {
     try {
       const res = await assetsApi.deletePreview(id)
       setDeletePreview(res.data)
-    } catch {
+    } catch (err: any) {
+      console.error('Failed to load delete preview:', err.message)
       setDeletePreview({ findings: '?', threats: '?', risks: '?', mitre_mappings: '?', vulnerabilities: '?' })
     }
   }
@@ -39,7 +40,8 @@ export default function AssetDetailPage() {
     try {
       await deleteAsset(id)
       navigate('/assets')
-    } catch {
+    } catch (err: any) {
+      console.error('Failed to delete asset:', err.message)
       setDeleteLoading(false)
     }
   }
@@ -50,7 +52,7 @@ export default function AssetDetailPage() {
     try {
       await assetsApi.fingerprint({ asset_id: id })
       await fetchAsset(id)
-    } catch { /* empty */ }
+    } catch (err: any) { console.error('Failed to refresh asset:', err.message) }
     setRefreshing(false)
   }
 
