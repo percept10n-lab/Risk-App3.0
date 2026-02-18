@@ -18,6 +18,7 @@ import {
   ChevronRight,
   ShieldAlert,
   Radar,
+  Newspaper,
 } from 'lucide-react'
 
 const navItems = [
@@ -25,6 +26,7 @@ const navItems = [
   { to: '/assets', icon: Monitor, label: 'Assets' },
   { to: '/findings', icon: AlertTriangle, label: 'Findings' },
   { to: '/threats', icon: Crosshair, label: 'Threats' },
+  { to: '/intel', icon: Newspaper, label: 'Threat Intel' },
   { to: '/risks', icon: Shield, label: 'Risks' },
   { to: '/mitre', icon: Target, label: 'MITRE ATT&CK' },
   { to: '/workflow', icon: PlayCircle, label: 'Workflow' },

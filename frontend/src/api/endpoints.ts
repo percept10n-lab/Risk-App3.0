@@ -143,6 +143,12 @@ export const nmapApi = {
   status: (runId: string) => api.get(`/nmap/status/${runId}`),
 }
 
+// Intel
+export const intelApi = {
+  summary: (days: number = 7) => api.get('/intel/summary', { params: { days } }),
+  dailyBrief: () => api.get('/intel/daily-brief'),
+}
+
 // Schedules
 export const schedulesApi = {
   list: () => api.get<ScanSchedule[]>('/schedules'),

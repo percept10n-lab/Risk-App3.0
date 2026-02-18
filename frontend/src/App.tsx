@@ -15,6 +15,7 @@ import VulnMgmtPage from './components/vulnmgmt/VulnMgmtPage'
 import ReportsPage from './components/reports/ReportsPage'
 import CopilotPage from './components/copilot/CopilotPage'
 import DriftPage from './components/drift/DriftPage'
+import IntelPage from './components/intel/IntelPage'
 import SettingsPage from './components/settings/SettingsPage'
 
 export default function App() {
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/findings" element={<FindingsPage />} />
         <Route path="/findings/:id" element={<FindingDetailPage />} />
         <Route path="/threats" element={<ThreatsPage />} />
+        <Route path="/intel" element={<IntelPage />} />
         <Route path="/risks" element={<RisksPage />} />
         <Route path="/mitre" element={<MitrePage />} />
         <Route path="/workflow" element={<WorkflowPage />} />

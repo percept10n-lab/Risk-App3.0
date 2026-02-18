@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import PageHeader from '../common/PageHeader'
 import Badge from '../common/Badge'
+import NmapConsole from '../nmap/NmapConsole'
 import { useRunStore } from '../../stores/runStore'
 import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle } from 'lucide-react'
 
@@ -15,14 +16,98 @@ const STEPS = [
   { key: 'baseline', label: 'Baseline Snapshot', description: 'Create drift detection baseline' },
 ]
 
+interface WsMessage {
+  type: string
+  message?: string
+  step?: string
+  timestamp?: string
+  steps_completed?: string[]
+}
+
 export default function WorkflowPage() {
   const { runs, activeRun, loading, polling, error, fetchRuns, createRun, pauseRun, resumeRun, cancelRun, stopPolling } = useRunStore()
   const [subnet, setSubnet] = useState('192.168.178.0/24')
   const [validationError, setValidationError] = useState<string | null>(null)
+  const [consoleLines, setConsoleLines] = useState<string[]>([])
+  const [wsConnected, setWsConnected] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
     fetchRuns()
-    return () => { stopPolling() }
+    return () => {
+      stopPolling()
+      wsRef.current?.close()
+    }
+  }, [])
+
+  // Close WS when run finishes
+  useEffect(() => {
+    if (activeRun && ['completed', 'failed', 'cancelled'].includes(activeRun.status)) {
+      wsRef.current?.close()
+    }
+  }, [activeRun?.status])
+
+  const connectWebSocket = useCallback((runId: string) => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = import.meta.env.VITE_API_URL
+      ? new URL(import.meta.env.VITE_API_URL).host
+      : window.location.host
+    const wsUrl = `${protocol}//${host}/api/ws/runs/${runId}`
+
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      setWsConnected(true)
+      setConsoleLines(prev => [...prev, '[Connected to live pipeline output]'])
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const msg: WsMessage = JSON.parse(event.data)
+        handleWsMessage(msg)
+      } catch {
+        // ignore parse errors
+      }
+    }
+
+    ws.onclose = () => {
+      setWsConnected(false)
+    }
+
+    ws.onerror = () => {
+      setWsConnected(false)
+    }
+  }, [])
+
+  const handleWsMessage = useCallback((msg: WsMessage) => {
+    const ts = msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString()
+    const text = msg.message || ''
+
+    switch (msg.type) {
+      case 'pipeline_start':
+        setConsoleLines(prev => [...prev, `[${ts}] ${text}`])
+        break
+      case 'step_start':
+        setConsoleLines(prev => [...prev, `[${ts}] >> ${text}`])
+        break
+      case 'step_complete':
+        setConsoleLines(prev => [...prev, `[${ts}]    ${text}`])
+        break
+      case 'step_warning':
+        setConsoleLines(prev => [...prev, `[${ts}] ${text}`])
+        break
+      case 'pipeline_complete':
+        setConsoleLines(prev => [...prev, '', `[${ts}] ${text}`, '[Pipeline finished]'])
+        break
+      case 'error':
+        setConsoleLines(prev => [...prev, '', `[${ts}] ERROR: ${text}`])
+        break
+      case 'pong':
+        break
+      default:
+        if (text) setConsoleLines(prev => [...prev, `[${ts}] ${text}`])
+    }
   }, [])
 
   const validateSubnet = (value: string): string | null => {
@@ -46,7 +131,13 @@ export default function WorkflowPage() {
       return
     }
     setValidationError(null)
-    await createRun({ scope: { subnets: [subnet] } })
+    setConsoleLines([`$ Starting assessment pipeline on ${subnet}`, ''])
+    wsRef.current?.close()
+
+    const run = await createRun({ scope: { subnets: [subnet] } })
+    if (run?.id) {
+      connectWebSocket(run.id)
+    }
   }
 
   const getStepStatus = (stepKey: string) => {
@@ -58,6 +149,7 @@ export default function WorkflowPage() {
   }
 
   const isRunning = activeRun && ['running', 'pending'].includes(activeRun.status)
+  const showConsole = consoleLines.length > 0
 
   return (
     <div>
@@ -197,6 +289,12 @@ export default function WorkflowPage() {
               <p className="text-sm text-gray-500">No active run. Enter your subnet and start a new assessment.</p>
             )}
           </div>
+
+          {showConsole && (
+            <div className="mt-4">
+              <NmapConsole lines={consoleLines} connected={wsConnected} />
+            </div>
+          )}
 
           <div className="card p-6 mt-4">
             <h3 className="font-semibold mb-4">Recent Runs</h3>
