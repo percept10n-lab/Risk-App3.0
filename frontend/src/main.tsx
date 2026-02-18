@@ -5,8 +5,6 @@ import App from './App'
 import ErrorBoundary from './components/common/ErrorBoundary'
 import './index.css'
 
-console.log('[main.tsx] Mounting React app...')
-
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
@@ -16,5 +14,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </React.StrictMode>,
 )
-
-console.log('[main.tsx] React render() called successfully')

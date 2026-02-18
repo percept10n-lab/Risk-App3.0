@@ -5,31 +5,6 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Risk Platform - Home Network Security</title>
-    <script>
-      // Pre-React error catcher — shows errors even if React fails to mount
-      window.__BOOT_ERRORS = [];
-      window.onerror = function(msg, src, line, col, err) {
-        window.__BOOT_ERRORS.push({ msg: msg, src: src, line: line, col: col, stack: err && err.stack });
-        console.error('[BOOT ERROR]', msg, 'at', src, line + ':' + col);
-        var root = document.getElementById('root');
-        if (root && !root.querySelector('.boot-error')) {
-          root.innerHTML = '<div class="boot-error" style="padding:32px;font-family:system-ui;max-width:800px;margin:40px auto">'
-            + '<div style="background:#fef2f2;border:2px solid #ef4444;border-radius:12px;padding:24px">'
-            + '<h1 style="color:#dc2626;font-size:20px;margin:0 0 8px">Boot Error</h1>'
-            + '<p style="color:#991b1b;font-size:14px;margin:0 0 16px">The app failed to start. JavaScript error:</p>'
-            + '<pre style="background:#1f2937;color:#f9fafb;border-radius:8px;padding:16px;font-size:13px;white-space:pre-wrap;word-break:break-word;overflow:auto;max-height:300px">'
-            + msg + '\n\nFile: ' + src + '\nLine: ' + line + ':' + col
-            + (err && err.stack ? '\n\nStack:\n' + err.stack : '')
-            + '</pre>'
-            + '<button onclick="location.reload()" style="background:#dc2626;color:white;border:none;border-radius:6px;padding:8px 16px;font-size:14px;cursor:pointer;margin-top:12px">Reload</button>'
-            + '</div></div>';
-        }
-      };
-      window.onunhandledrejection = function(ev) {
-        console.error('[UNHANDLED PROMISE]', ev.reason);
-      };
-      console.log('[index.html] Error handlers installed, loading app...');
-    </script>
   </head>
   <body class="bg-gray-50 text-gray-900">
     <div id="root"></div>

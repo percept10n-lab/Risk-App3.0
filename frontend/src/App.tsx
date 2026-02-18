@@ -23,10 +23,7 @@ import AdvisoriesPage from './components/threatintel/AdvisoriesPage'
 import SourcesPage from './components/threatintel/SourcesPage'
 import IdentityMonitorPage from './components/threatintel/IdentityMonitorPage'
 
-console.log('[App.tsx] Module loaded, all imports resolved')
-
 export default function App() {
-  console.log('[App.tsx] App component rendering')
   return (
     <Routes>
       <Route element={<Layout />}>
