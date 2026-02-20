@@ -669,14 +669,21 @@ class FingerprintService:
                 # Skip network fingerprinting if asset already has exposure data (demo/enriched)
                 if asset.exposure and asset.os_guess:
                     logger.info("Asset already fingerprinted, skipping", ip=asset.ip_address)
-                    results_list.append({
+                    fp_result = {
                         "target": asset.ip_address,
                         "open_ports": [],
                         "services": [],
                         "os": {"os_guess": asset.os_guess, "os_accuracy": 80, "method": "pre-populated"},
                         "exposure": asset.exposure,
                         "skipped": True,
-                    })
+                    }
+                    results_list.append(fp_result)
+                    # Always re-evaluate classification (vendor/hostname may improve it)
+                    asset_type = self._guess_asset_type(fp_result, vendor=asset.vendor, hostname=asset.hostname)
+                    if asset_type != "unknown":
+                        asset.asset_type = asset_type
+                        asset.zone = self._assign_zone(asset_type)
+                        asset.criticality = self._assign_criticality(asset_type)
                     fingerprinted += 1
                     continue
 
