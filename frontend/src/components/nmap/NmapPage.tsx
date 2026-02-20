@@ -29,7 +29,7 @@ interface WsMessage {
   error?: string
 }
 
-export default function NmapPage() {
+export default function NmapPage({ embedded }: { embedded?: boolean }) {
   const [phase, setPhase] = useState<Phase>('configure')
   const [runId, setRunId] = useState<string | null>(null)
   const [consoleLines, setConsoleLines] = useState<string[]>([])
@@ -196,17 +196,19 @@ export default function NmapPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Nmap Scanner"
-        description="Custom network scanning with autonomous risk pipeline"
-        actions={
-          phase !== 'configure' ? (
-            <button onClick={handleNewScan} className="btn-secondary flex items-center gap-2 text-sm">
-              <RotateCcw className="w-4 h-4" /> New Scan
-            </button>
-          ) : undefined
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="Nmap Scanner"
+          description="Custom network scanning with autonomous risk pipeline"
+          actions={
+            phase !== 'configure' ? (
+              <button onClick={handleNewScan} className="btn-secondary flex items-center gap-2 text-sm">
+                <RotateCcw className="w-4 h-4" /> New Scan
+              </button>
+            ) : undefined
+          }
+        />
+      )}
 
       {/* Configure Phase */}
       {phase === 'configure' && (

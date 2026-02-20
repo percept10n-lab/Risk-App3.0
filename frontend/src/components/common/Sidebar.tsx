@@ -3,39 +3,30 @@ import { useUIStore } from '../../stores/uiStore'
 import {
   LayoutDashboard,
   Monitor,
-  AlertTriangle,
   Shield,
   Crosshair,
-  Target,
   PlayCircle,
-  Swords,
   Bug,
   FileText,
   Bot,
-  GitCompare,
   Settings,
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
-  Radar,
-  Newspaper,
 } from 'lucide-react'
 
 const navItems = [
+  { to: '/', icon: Bot, label: 'AI Copilot', end: true },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/assets', icon: Monitor, label: 'Assets' },
-  { to: '/findings', icon: AlertTriangle, label: 'Findings' },
-  { to: '/threats', icon: Crosshair, label: 'Threats' },
-  { to: '/intel', icon: Newspaper, label: 'Threat Intel' },
+  { to: '/findings', icon: Bug, label: 'Findings & Vulns' },
+  { to: '/threats', icon: Crosshair, label: 'Threat Analysis' },
+  { to: '/operations', icon: PlayCircle, label: 'Operations' },
   { to: '/risks', icon: Shield, label: 'Risks' },
-  { to: '/mitre', icon: Target, label: 'MITRE ATT&CK' },
-  { to: '/workflow', icon: PlayCircle, label: 'Workflow' },
-  { to: '/pentest', icon: Swords, label: 'Pentest' },
-  { to: '/nmap', icon: Radar, label: 'Nmap Scanner' },
-  { to: '/vulnmgmt', icon: Bug, label: 'Vuln Management' },
   { to: '/reports', icon: FileText, label: 'Reports' },
-  { to: '/copilot', icon: Bot, label: 'AI Copilot' },
-  { to: '/drift', icon: GitCompare, label: 'Drift Monitor' },
+]
+
+const bottomItems = [
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
@@ -60,6 +51,7 @@ export default function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
+            end={'end' in item ? item.end : undefined}
             aria-label={!sidebarOpen ? item.label : undefined}
             title={!sidebarOpen ? item.label : undefined}
             className={({ isActive }) =>
@@ -75,6 +67,27 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <div className="border-t border-gray-800 py-2 space-y-1">
+        {bottomItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            aria-label={!sidebarOpen ? item.label : undefined}
+            title={!sidebarOpen ? item.label : undefined}
+            className={({ isActive }) =>
+              `flex items-center px-4 py-2.5 mx-2 rounded-lg text-sm transition-colors ${
+                isActive
+                  ? 'bg-brand-600 text-white'
+                  : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+              }`
+            }
+          >
+            <item.icon className="w-5 h-5 flex-shrink-0" />
+            {sidebarOpen && <span className="ml-3 truncate">{item.label}</span>}
+          </NavLink>
+        ))}
+      </div>
 
       <button
         onClick={toggleSidebar}

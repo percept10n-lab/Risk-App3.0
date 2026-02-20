@@ -24,7 +24,7 @@ interface WsMessage {
   steps_completed?: string[]
 }
 
-export default function WorkflowPage() {
+export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
   const { runs, activeRun, loading, polling, error, fetchRuns, createRun, pauseRun, resumeRun, cancelRun, stopPolling } = useRunStore()
   const [subnet, setSubnet] = useState('192.168.178.0/24')
   const [validationError, setValidationError] = useState<string | null>(null)
@@ -156,29 +156,31 @@ export default function WorkflowPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Workflow Runner"
-        description="Execute and monitor assessment workflows"
-        actions={
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              value={subnet}
-              onChange={(e) => { setSubnet(e.target.value); setValidationError(null) }}
-              placeholder="192.168.178.0/24"
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-44"
-              disabled={!!isRunning}
-            />
-            <button
-              onClick={handleNewRun}
-              disabled={loading || !!isRunning}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Play className="w-4 h-4" /> New Assessment Run
-            </button>
-          </div>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="Workflow Runner"
+          description="Execute and monitor assessment workflows"
+          actions={
+            <div className="flex items-center gap-3">
+              <input
+                type="text"
+                value={subnet}
+                onChange={(e) => { setSubnet(e.target.value); setValidationError(null) }}
+                placeholder="192.168.178.0/24"
+                className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-44"
+                disabled={!!isRunning}
+              />
+              <button
+                onClick={handleNewRun}
+                disabled={loading || !!isRunning}
+                className="btn-primary flex items-center gap-2"
+              >
+                <Play className="w-4 h-4" /> New Assessment Run
+              </button>
+            </div>
+          }
+        />
+      )}
 
       {validationError && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm flex items-center gap-2">

@@ -62,7 +62,7 @@ export default function NmapResultsSummary({ results }: NmapResultsSummaryProps)
     { path: '/findings', label: 'View Findings', icon: FileSearch, color: 'bg-amber-500 hover:bg-amber-600', desc: 'Scan findings and vulnerabilities' },
     { path: '/threats', label: 'View Threats', icon: Crosshair, color: 'bg-red-500 hover:bg-red-600', desc: 'Generated threat scenarios' },
     { path: '/risks', label: 'View Risks & Treatment', icon: AlertTriangle, color: 'bg-purple-500 hover:bg-purple-600', desc: 'Risk analysis and treatment plans' },
-    { path: '/mitre', label: 'MITRE ATT&CK Map', icon: Map, color: 'bg-emerald-500 hover:bg-emerald-600', desc: 'ATT&CK technique mappings' },
+    { path: '/threats?tab=mitre', label: 'MITRE ATT&CK Map', icon: Map, color: 'bg-emerald-500 hover:bg-emerald-600', desc: 'ATT&CK technique mappings' },
   ]
 
   return (

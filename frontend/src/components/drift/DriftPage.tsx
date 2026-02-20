@@ -36,7 +36,7 @@ interface BaselineInfo {
 
 const ZONES = ['all', 'lan', 'iot', 'guest', 'dmz'] as const
 
-export default function DriftPage() {
+export default function DriftPage({ embedded }: { embedded?: boolean }) {
   const [changes, setChanges] = useState<DriftChange[]>([])
   const [alerts, setAlerts] = useState<DriftAlert[]>([])
   const [baselines, setBaselines] = useState<BaselineInfo[]>([])
@@ -145,18 +145,20 @@ export default function DriftPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Drift Monitor"
-        description="Track changes between assessment runs"
-        actions={
-          <div className="flex items-center gap-3">
-            {statusBadge()}
-            <button onClick={loadData} className="btn-secondary flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" /> Refresh
-            </button>
-          </div>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="Drift Monitor"
+          description="Track changes between assessment runs"
+          actions={
+            <div className="flex items-center gap-3">
+              {statusBadge()}
+              <button onClick={loadData} className="btn-secondary flex items-center gap-2">
+                <RefreshCw className="w-4 h-4" /> Refresh
+              </button>
+            </div>
+          }
+        />
+      )}
 
       {/* Alert Banner */}
       {criticalAlerts.length > 0 && (

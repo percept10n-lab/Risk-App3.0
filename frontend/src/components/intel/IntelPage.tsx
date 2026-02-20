@@ -49,7 +49,7 @@ const SOURCE_COLORS: Record<string, string> = {
   'BleepingComputer': 'bg-red-100 text-red-700',
 }
 
-export default function IntelPage() {
+export default function IntelPage({ embedded }: { embedded?: boolean }) {
   const [summary, setSummary] = useState<IntelSummary | null>(null)
   const [brief, setBrief] = useState<DailyBrief | null>(null)
   const [news, setNews] = useState<NewsResponse | null>(null)
@@ -118,27 +118,29 @@ export default function IntelPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Threat Intelligence"
-        description="Security posture overview and threat landscape analysis"
-        actions={
-          <div className="flex items-center gap-2">
-            {([1, 7, 30] as Period[]).map((d) => (
-              <button
-                key={d}
-                onClick={() => setPeriod(d)}
-                className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                  period === d
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {d === 1 ? '24h' : `${d}d`}
-              </button>
-            ))}
-          </div>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="Threat Intelligence"
+          description="Security posture overview and threat landscape analysis"
+          actions={
+            <div className="flex items-center gap-2">
+              {([1, 7, 30] as Period[]).map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setPeriod(d)}
+                  className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    period === d
+                      ? 'bg-brand-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {d === 1 ? '24h' : `${d}d`}
+                </button>
+              ))}
+            </div>
+          }
+        />
+      )}
 
       {loading && !summary ? (
         <div className="flex items-center justify-center h-64">

@@ -42,7 +42,7 @@ const TACTICS = [
   'Exfiltration', 'Impact',
 ]
 
-export default function MitrePage() {
+export default function MitrePage({ embedded }: { embedded?: boolean }) {
   const [mappings, setMappings] = useState<EnrichedMapping[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTechnique, setSelectedTechnique] = useState<TechniqueGroup | null>(null)
@@ -111,15 +111,17 @@ export default function MitrePage() {
 
   return (
     <div>
-      <PageHeader
-        title="MITRE ATT&CK Mapping"
-        description="Technique mappings enriched with findings and assets"
-        actions={
-          <button onClick={handleExport} className="btn-primary flex items-center gap-2">
-            <Download className="w-4 h-4" /> Export Navigator Layer
-          </button>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="MITRE ATT&CK Mapping"
+          description="Technique mappings enriched with findings and assets"
+          actions={
+            <button onClick={handleExport} className="btn-primary flex items-center gap-2">
+              <Download className="w-4 h-4" /> Export Navigator Layer
+            </button>
+          }
+        />
+      )}
 
       {/* Legend */}
       {!loading && mappings.length > 0 && (

@@ -74,7 +74,7 @@ interface InvestigateData {
   plan: { steps: Array<{ step: number; action: string; detail: string }>; risk_notes: string[]; estimated_effort: string; verification: string }
 }
 
-export default function CopilotPage() {
+export default function CopilotPage({ embedded }: { embedded?: boolean }) {
   const [activeTab, setActiveTab] = useState<'agent' | 'workflow'>('agent')
   const [triageResults, setTriageResults] = useState<TriageItem[]>([])
   const [loading, setLoading] = useState<Record<string, boolean>>({})
@@ -204,26 +204,28 @@ export default function CopilotPage() {
 
   return (
     <div>
-      <PageHeader
-        title="AI Defense Copilot"
-        description="AI-assisted security analysis and remediation workflow"
-        actions={
-          <div className="flex gap-2">
-            {activeTab === 'workflow' && (
-              <>
-                <button onClick={runTriage} disabled={loading.triage} className="btn-secondary flex items-center gap-2">
-                  <Lightbulb className="w-4 h-4" /> {loading.triage ? 'Analyzing...' : 'Run Triage'}
-                </button>
-                {currentStep !== 'IDLE' && (
-                  <button onClick={resetWorkflow} className="btn-secondary flex items-center gap-2">
-                    <RotateCcw className="w-4 h-4" /> Reset Workflow
+      {!embedded && (
+        <PageHeader
+          title="AI Defense Copilot"
+          description="AI-assisted security analysis and remediation workflow"
+          actions={
+            <div className="flex gap-2">
+              {activeTab === 'workflow' && (
+                <>
+                  <button onClick={runTriage} disabled={loading.triage} className="btn-secondary flex items-center gap-2">
+                    <Lightbulb className="w-4 h-4" /> {loading.triage ? 'Analyzing...' : 'Run Triage'}
                   </button>
-                )}
-              </>
-            )}
-          </div>
-        }
-      />
+                  {currentStep !== 'IDLE' && (
+                    <button onClick={resetWorkflow} className="btn-secondary flex items-center gap-2">
+                      <RotateCcw className="w-4 h-4" /> Reset Workflow
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          }
+        />
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">

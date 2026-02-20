@@ -60,7 +60,7 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   verified: [],
 }
 
-export default function VulnMgmtPage() {
+export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
   const [findings, setFindings] = useState<FindingInfo[]>([])
   const [metrics, setMetrics] = useState<VulnMetrics | null>(null)
   const [loading, setLoading] = useState(true)
@@ -235,15 +235,17 @@ export default function VulnMgmtPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Vulnerability Management"
-        description="Track and manage vulnerability lifecycle"
-        actions={
-          <button onClick={loadData} className="btn-secondary flex items-center gap-2">
-            <RefreshCw className="w-4 h-4" /> Refresh
-          </button>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="Vulnerability Management"
+          description="Track and manage vulnerability lifecycle"
+          actions={
+            <button onClick={loadData} className="btn-secondary flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
+          }
+        />
+      )}
 
       {/* Top Metrics Bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">

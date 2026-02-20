@@ -82,7 +82,7 @@ const ZONE_INFO: Record<string, { description: string; risk: string }> = {
   dmz: { description: 'Demilitarized zone for exposed services', risk: 'Critical' },
 }
 
-export default function ThreatsPage() {
+export default function ThreatsPage({ embedded }: { embedded?: boolean }) {
   const [activeTab, setActiveTab] = useState<Tab>('threats')
 
   const tabs = [
@@ -93,10 +93,12 @@ export default function ThreatsPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Threat Modeling"
-        description="STRIDE-based threat analysis and zone trust boundary mapping"
-      />
+      {!embedded && (
+        <PageHeader
+          title="Threat Modeling"
+          description="STRIDE-based threat analysis and zone trust boundary mapping"
+        />
+      )}
 
       <div className="flex gap-1 mb-6 border-b border-gray-200">
         {tabs.map((tab) => (

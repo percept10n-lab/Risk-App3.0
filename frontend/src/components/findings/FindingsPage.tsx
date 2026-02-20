@@ -88,7 +88,7 @@ const columns = [
   },
 ]
 
-export default function FindingsPage() {
+export default function FindingsPage({ embedded }: { embedded?: boolean }) {
   const { findings, total, page, pageSize, loading, filters, fetchFindings, setFilters, setPage } = useFindingStore()
   const { assets, fetchAssets } = useAssetStore()
 
@@ -125,55 +125,57 @@ export default function FindingsPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Findings"
-        description="Vulnerability and misconfiguration findings"
-        actions={
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setScanModalOpen(true); setScanResult(null); setScanAssetId('') }}
-              className="btn-primary text-sm flex items-center gap-2"
-            >
-              <Search className="w-4 h-4" />
-              Run Vuln Scan
-            </button>
-            <select
-              value={filters.severity || ''}
-              onChange={(e) => setFilters({ severity: e.target.value || undefined })}
-              className="btn-secondary text-sm"
-            >
-              <option value="">All Severities</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-              <option value="info">Info</option>
-            </select>
-            <select
-              value={filters.status || ''}
-              onChange={(e) => setFilters({ status: e.target.value || undefined })}
-              className="btn-secondary text-sm"
-            >
-              <option value="">All Status</option>
-              <option value="open">Open</option>
-              <option value="in_progress">In Progress</option>
-              <option value="fixed">Fixed</option>
-              <option value="accepted">Accepted</option>
-            </select>
-            <select
-              value={filters.category || ''}
-              onChange={(e) => setFilters({ category: e.target.value || undefined })}
-              className="btn-secondary text-sm"
-            >
-              <option value="">All Categories</option>
-              <option value="vuln">Vulnerability</option>
-              <option value="misconfig">Misconfiguration</option>
-              <option value="exposure">Exposure</option>
-              <option value="info">Informational</option>
-            </select>
-          </div>
-        }
-      />
+      {!embedded && (
+        <PageHeader
+          title="Findings"
+          description="Vulnerability and misconfiguration findings"
+          actions={
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setScanModalOpen(true); setScanResult(null); setScanAssetId('') }}
+                className="btn-primary text-sm flex items-center gap-2"
+              >
+                <Search className="w-4 h-4" />
+                Run Vuln Scan
+              </button>
+              <select
+                value={filters.severity || ''}
+                onChange={(e) => setFilters({ severity: e.target.value || undefined })}
+                className="btn-secondary text-sm"
+              >
+                <option value="">All Severities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="info">Info</option>
+              </select>
+              <select
+                value={filters.status || ''}
+                onChange={(e) => setFilters({ status: e.target.value || undefined })}
+                className="btn-secondary text-sm"
+              >
+                <option value="">All Status</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="fixed">Fixed</option>
+                <option value="accepted">Accepted</option>
+              </select>
+              <select
+                value={filters.category || ''}
+                onChange={(e) => setFilters({ category: e.target.value || undefined })}
+                className="btn-secondary text-sm"
+              >
+                <option value="">All Categories</option>
+                <option value="vuln">Vulnerability</option>
+                <option value="misconfig">Misconfiguration</option>
+                <option value="exposure">Exposure</option>
+                <option value="info">Informational</option>
+              </select>
+            </div>
+          }
+        />
+      )}
 
       <DataTable
         columns={columns}

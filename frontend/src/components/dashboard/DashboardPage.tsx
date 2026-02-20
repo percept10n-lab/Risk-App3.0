@@ -117,7 +117,7 @@ export default function DashboardPage() {
             <StatCard title="Total Assets" value={stats?.total_assets ?? 0} icon={Monitor} color="blue" onClick={() => navigate('/assets')} />
             <StatCard title="Findings" value={stats?.total_findings ?? 0} icon={AlertTriangle} color="yellow" onClick={() => navigate('/findings')} />
             <StatCard title="Risks" value={stats?.total_risks ?? 0} icon={Shield} color="red" onClick={() => navigate('/risks')} />
-            <StatCard title="Threats" value={stats?.total_threats ?? 0} icon={Target} color="purple" onClick={() => navigate('/mitre')} />
+            <StatCard title="Threats" value={stats?.total_threats ?? 0} icon={Target} color="purple" onClick={() => navigate('/threats?tab=mitre')} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -181,7 +181,7 @@ export default function DashboardPage() {
             <div className="card p-6">
               <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
               <div className="space-y-3">
-                <button onClick={() => navigate('/workflow')} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors w-full text-left">
+                <button onClick={() => navigate('/operations?tab=workflow')} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors w-full text-left">
                   <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center">
                     <Bug className="w-5 h-5" />
                   </div>
@@ -190,7 +190,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-gray-500">Run discovery and vulnerability scanning</p>
                   </div>
                 </button>
-                <button onClick={() => navigate('/copilot')} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors w-full text-left">
+                <button onClick={() => navigate('/')} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors w-full text-left">
                   <div className="w-10 h-10 rounded-lg bg-yellow-50 text-yellow-600 flex items-center justify-center">
                     <Crosshair className="w-5 h-5" />
                   </div>
