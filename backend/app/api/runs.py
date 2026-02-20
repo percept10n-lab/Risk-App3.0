@@ -89,7 +89,8 @@ async def _generate_pipeline_report(db: AsyncSession, run_id: str) -> str:
             "ip_address": a.ip_address, "hostname": a.hostname,
             "asset_type": a.asset_type, "zone": a.zone,
             "criticality": a.criticality, "os_guess": a.os_guess,
-            "vendor": a.vendor, "open_ports": a.open_ports or [],
+            "vendor": a.vendor,
+            "open_ports": (a.exposure or {}).get("open_ports", []),
         }
         for a in assets_result.scalars().all()
     ]
