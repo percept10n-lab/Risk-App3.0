@@ -157,6 +157,7 @@ class DiscoveryService:
         # Upsert assets
         created = 0
         updated = 0
+        created_ips: list[str] = []
         for host in hosts:
             exposure = self._build_exposure_from_ports(host["ports"])
             asset_data = {
@@ -172,6 +173,7 @@ class DiscoveryService:
                 updated += 1
             else:
                 created += 1
+                created_ips.append(host["ip"])
             await self.asset_service.upsert_from_scan(asset_data)
 
         # Store artifact
@@ -206,6 +208,7 @@ class DiscoveryService:
             "hosts": hosts,
             "assets_created": created,
             "assets_updated": updated,
+            "created_ips": created_ips,
         }
 
     async def run_discovery(self, subnet: str, run_id: str | None = None, timeout: int = 60) -> dict:

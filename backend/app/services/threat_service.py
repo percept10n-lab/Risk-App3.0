@@ -96,7 +96,14 @@ class ThreatService:
 
     def _generate_threats_for_asset(self, asset: Asset) -> list[dict]:
         """Generate threats using rule-based logic."""
-        from mcp_servers.threat_modeling.rules import ThreatRuleEngine
+        try:
+            from mcp_servers.threat_modeling.rules import ThreatRuleEngine
+        except ImportError:
+            import sys, os
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+            from mcp_servers.threat_modeling.rules import ThreatRuleEngine
 
         engine = ThreatRuleEngine()
         exposure = asset.exposure or {}
@@ -166,7 +173,14 @@ class ThreatService:
         self, run_id: str | None = None, broadcast_fn=None
     ) -> dict:
         """Run full C4-decomposed threat modeling with STRIDE analysis."""
-        from mcp_servers.threat_modeling.rules import ThreatRuleEngine
+        try:
+            from mcp_servers.threat_modeling.rules import ThreatRuleEngine
+        except ImportError:
+            import sys, os
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+            from mcp_servers.threat_modeling.rules import ThreatRuleEngine
         from collections import Counter
 
         logger.info("Starting full C4 threat modeling", run_id=run_id)
@@ -346,7 +360,14 @@ class ThreatService:
         self, zone: str, run_id: str | None = None
     ) -> dict:
         """Run zone-level threat analysis."""
-        from mcp_servers.threat_modeling.rules import ThreatRuleEngine
+        try:
+            from mcp_servers.threat_modeling.rules import ThreatRuleEngine
+        except ImportError:
+            import sys, os
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+            from mcp_servers.threat_modeling.rules import ThreatRuleEngine
 
         engine = ThreatRuleEngine()
 

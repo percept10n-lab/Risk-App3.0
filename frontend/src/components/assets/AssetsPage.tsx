@@ -486,38 +486,47 @@ export default function AssetsPage() {
                 ) : (
                   <div className="p-4 bg-green-50 rounded-lg border border-green-200">
                     <p className="text-sm text-green-700 font-medium mb-3">
-                      {refreshResult.hosts?.length ?? 0} host(s) found with open ports
+                      {refreshResult.hosts?.length ?? 0} host(s) found &mdash; {refreshResult.assets_created ?? 0} new, {refreshResult.assets_updated ?? 0} updated
                     </p>
-                    {refreshResult.hosts && refreshResult.hosts.length > 0 && (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="border-b border-green-200">
-                              <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">IP Address</th>
-                              <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">Hostname</th>
-                              <th className="text-left py-1.5 text-green-800 font-semibold">Open Ports</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {refreshResult.hosts.map((host: any) => (
-                              <tr key={host.ip} className="border-b border-green-100 last:border-0">
-                                <td className="py-1.5 pr-3 font-mono">{host.ip}</td>
-                                <td className="py-1.5 pr-3 text-gray-600">{host.hostname || '-'}</td>
-                                <td className="py-1.5">
-                                  <div className="flex flex-wrap gap-1">
-                                    {host.ports?.map((p: any) => (
-                                      <span key={p.port} className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-mono">
-                                        {p.port}/{p.proto}{p.service ? ` ${p.service}` : ''}
-                                      </span>
-                                    ))}
-                                  </div>
-                                </td>
+                    {(() => {
+                      const createdIps: string[] = refreshResult.created_ips || []
+                      const newHosts = createdIps.length > 0
+                        ? (refreshResult.hosts || []).filter((h: any) => createdIps.includes(h.ip))
+                        : []
+                      return newHosts.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <p className="text-xs font-semibold text-green-800 mb-2">Newly discovered assets:</p>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-green-200">
+                                <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">IP Address</th>
+                                <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">Hostname</th>
+                                <th className="text-left py-1.5 text-green-800 font-semibold">Open Ports</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                            </thead>
+                            <tbody>
+                              {newHosts.map((host: any) => (
+                                <tr key={host.ip} className="border-b border-green-100 last:border-0">
+                                  <td className="py-1.5 pr-3 font-mono">{host.ip}</td>
+                                  <td className="py-1.5 pr-3 text-gray-600">{host.hostname || '-'}</td>
+                                  <td className="py-1.5">
+                                    <div className="flex flex-wrap gap-1">
+                                      {host.ports?.map((p: any) => (
+                                        <span key={p.port} className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-mono">
+                                          {p.port}/{p.proto}{p.service ? ` ${p.service}` : ''}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-green-600">No new assets discovered. All hosts were already in the inventory.</p>
+                      )
+                    })()}
                     <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-green-200">
                       <div className="text-center">
                         <p className="text-xl font-bold text-blue-700">{refreshResult.assets_created ?? 0}</p>

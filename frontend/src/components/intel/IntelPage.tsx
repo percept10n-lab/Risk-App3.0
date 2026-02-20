@@ -57,7 +57,7 @@ export default function IntelPage({ embedded }: { embedded?: boolean }) {
   const [briefLoading, setBriefLoading] = useState(false)
   const [newsLoading, setNewsLoading] = useState(true)
   const [period, setPeriod] = useState<Period>(7)
-  const [briefOpen, setBriefOpen] = useState(true)
+  const [briefOpen, setBriefOpen] = useState(false)
 
   useEffect(() => {
     loadSummary(period)
@@ -92,10 +92,10 @@ export default function IntelPage({ embedded }: { embedded?: boolean }) {
     }
   }
 
-  async function loadNews() {
+  async function loadNews(force?: boolean) {
     setNewsLoading(true)
     try {
-      const res = await intelApi.news()
+      const res = await intelApi.news(force)
       setNews(res.data)
     } catch (err: any) {
       console.error('Failed to load security news:', err.message)
@@ -148,162 +148,150 @@ export default function IntelPage({ embedded }: { embedded?: boolean }) {
         </div>
       ) : (
         <>
-          {/* Stat Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <StatCard
-              title="Total Threats"
-              value={summary?.totals.threats ?? 0}
-              icon={Crosshair}
-              color="purple"
-            />
-            <StatCard
-              title={`New Threats (${period === 1 ? '24h' : `${period}d`})`}
-              value={summary?.recent_threats_count ?? 0}
-              icon={Target}
-              color="red"
-            />
-            <StatCard
-              title="Open Critical/High"
-              value={summary?.open_critical_high ?? 0}
-              icon={AlertTriangle}
-              color="yellow"
-            />
-            <StatCard
-              title="Critical Risks"
-              value={summary?.critical_risks ?? 0}
-              icon={Shield}
-              color="red"
-            />
-          </div>
-
-          {/* Intelligence Lookup */}
-          <IntelLookupSection />
-
-          {/* Daily Brief */}
-          <div className="card mb-6">
-            <div
-              className="flex items-center justify-between px-6 py-4 cursor-pointer"
-              onClick={() => setBriefOpen(!briefOpen)}
-            >
-              <div className="flex items-center gap-3">
-                <h3 className="font-semibold">Daily Threat Brief</h3>
-                {brief?.ai_generated && (
-                  <span className="flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
-                    <Sparkles className="w-3 h-3" /> AI Generated
-                  </span>
-                )}
+          {/* Main 2-Column Layout: Sidebar (stats + lookup + brief) | News Feed */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            {/* Left Sidebar */}
+            <div className="lg:col-span-1 space-y-4">
+              {/* Compact Stats (2x2) */}
+              <div className="grid grid-cols-2 gap-3">
+                <StatCard title="Total Threats" value={summary?.totals.threats ?? 0} icon={Crosshair} color="purple" />
+                <StatCard title={`New (${period === 1 ? '24h' : `${period}d`})`} value={summary?.recent_threats_count ?? 0} icon={Target} color="red" />
+                <StatCard title="Open Crit/High" value={summary?.open_critical_high ?? 0} icon={AlertTriangle} color="yellow" />
+                <StatCard title="Critical Risks" value={summary?.critical_risks ?? 0} icon={Shield} color="red" />
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => { e.stopPropagation(); loadBrief() }}
-                  disabled={briefLoading}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-                  title="Refresh brief"
+
+              {/* Intelligence Lookup */}
+              <IntelLookupSection />
+
+              {/* Daily Brief (collapsed by default) */}
+              <div className="card">
+                <div
+                  className="flex items-center justify-between px-4 py-3 cursor-pointer"
+                  onClick={() => setBriefOpen(!briefOpen)}
                 >
-                  <RefreshCw className={`w-4 h-4 text-gray-500 ${briefLoading ? 'animate-spin' : ''}`} />
-                </button>
-                {briefOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-              </div>
-            </div>
-            {briefOpen && (
-              <div className="px-6 pb-6 border-t pt-4">
-                {briefLoading ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-sm">Daily Threat Brief</h3>
+                    {brief?.ai_generated && (
+                      <span className="flex items-center gap-1 text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">
+                        <Sparkles className="w-2.5 h-2.5" /> AI
+                      </span>
+                    )}
                   </div>
-                ) : brief ? (
-                  <div className="prose prose-sm max-w-none text-gray-700" dangerouslySetInnerHTML={{ __html: renderMarkdown(brief.brief) }} />
-                ) : (
-                  <p className="text-sm text-gray-500">No brief available</p>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); loadBrief() }}
+                      disabled={briefLoading}
+                      className="p-1 rounded hover:bg-gray-100 transition-colors"
+                      title="Refresh brief"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-gray-500 ${briefLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                    {briefOpen ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                  </div>
+                </div>
+                {briefOpen && (
+                  <div className="px-4 pb-4 border-t pt-3">
+                    {briefLoading ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-5 h-5 animate-spin text-brand-500" />
+                      </div>
+                    ) : brief ? (
+                      <div className="prose prose-sm max-w-none text-gray-700 text-xs" dangerouslySetInnerHTML={{ __html: renderMarkdown(brief.brief) }} />
+                    ) : (
+                      <p className="text-xs text-gray-500">No brief available</p>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-          </div>
-
-          {/* Security News Feed */}
-          <div className="card mb-6">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Newspaper className="w-5 h-5 text-brand-600" />
-                <h3 className="font-semibold">Security News & Threat Briefing</h3>
-                {news && <span className="text-xs text-gray-400">{news.source_count} sources</span>}
-              </div>
-              <div className="flex items-center gap-3">
-                {news?.fetched_at && (
-                  <span className="text-xs text-gray-400">
-                    Updated {new Date(news.fetched_at).toLocaleTimeString()}
-                  </span>
-                )}
-                <button
-                  onClick={loadNews}
-                  disabled={newsLoading}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-                  title="Refresh news"
-                >
-                  <RefreshCw className={`w-4 h-4 text-gray-500 ${newsLoading ? 'animate-spin' : ''}`} />
-                </button>
               </div>
             </div>
-            <div className="p-6">
-              {newsLoading && !news ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+
+            {/* Right: Security News Feed (prominent) */}
+            <div className="lg:col-span-2">
+              <div className="card h-full">
+                <div className="px-5 py-4 border-b flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Newspaper className="w-5 h-5 text-brand-600" />
+                    <h3 className="font-semibold">Security News & Threat Briefing</h3>
+                    {news && <span className="text-xs text-gray-400">{news.source_count} sources</span>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {news?.fetched_at && (
+                      <span className="text-xs text-gray-400">
+                        Updated {new Date(news.fetched_at).toLocaleTimeString()}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => loadNews(true)}
+                      disabled={newsLoading}
+                      className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                      title="Force refresh news"
+                    >
+                      <RefreshCw className={`w-4 h-4 text-gray-500 ${newsLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
                 </div>
-              ) : !news || news.articles.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">No security news available. Check back later.</p>
-              ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {news.articles.map((article, idx) => (
-                    <div key={idx} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${SOURCE_COLORS[article.source] || 'bg-gray-100 text-gray-600'}`}>
-                          {article.source}
-                        </span>
-                        {article.published && (
-                          <span className="text-xs text-gray-400">
-                            {(() => {
-                              try { return new Date(article.published).toLocaleDateString() } catch { return article.published }
-                            })()}
-                          </span>
-                        )}
-                      </div>
-                      <a
-                        href={article.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm font-semibold text-gray-900 hover:text-brand-600 flex items-start gap-1"
-                      >
-                        {article.title}
-                        <ExternalLink className="w-3 h-3 shrink-0 mt-1 text-gray-400" />
-                      </a>
-                      {article.summary && (
-                        <p className="text-xs text-gray-600 mt-2 line-clamp-3">{article.summary}</p>
-                      )}
-
-                      {/* ISO 27001 Controls */}
-                      <div className="mt-3 p-2.5 bg-blue-50 rounded-md">
-                        <p className="text-xs font-semibold text-blue-800 mb-1">ISO 27001 Controls</p>
-                        {article.iso27001_controls.map((ctrl, ci) => (
-                          <div key={ci} className="text-xs text-blue-700 mt-1">
-                            <span className="font-mono font-medium">{ctrl.control}</span> — {ctrl.name}
-                            <p className="text-blue-600 mt-0.5">{ctrl.recommendation}</p>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Home Network Risk */}
-                      <div className="mt-2 p-2.5 bg-amber-50 rounded-md">
-                        <p className="text-xs font-semibold text-amber-800 mb-1">Home Network Impact</p>
-                        <p className="text-xs text-amber-700">{article.home_network_risk}</p>
-                      </div>
+                <div className="p-5 max-h-[calc(100vh-16rem)] overflow-y-auto">
+                  {newsLoading && !news ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
                     </div>
-                  ))}
+                  ) : !news || news.articles.length === 0 ? (
+                    <p className="text-sm text-gray-500 text-center py-8">No security news available. Check back later.</p>
+                  ) : (
+                    <div className="space-y-4">
+                      {news.articles.map((article, idx) => (
+                        <div key={idx} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${SOURCE_COLORS[article.source] || 'bg-gray-100 text-gray-600'}`}>
+                              {article.source}
+                            </span>
+                            {article.published && (
+                              <span className="text-xs text-gray-400">
+                                {(() => {
+                                  try { return new Date(article.published).toLocaleDateString() } catch { return article.published }
+                                })()}
+                              </span>
+                            )}
+                          </div>
+                          <a
+                            href={article.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-semibold text-gray-900 hover:text-brand-600 flex items-start gap-1"
+                          >
+                            {article.title}
+                            <ExternalLink className="w-3 h-3 shrink-0 mt-1 text-gray-400" />
+                          </a>
+                          {article.summary && (
+                            <p className="text-xs text-gray-600 mt-2 line-clamp-3">{article.summary}</p>
+                          )}
+
+                          {/* ISO 27001 Controls */}
+                          <div className="mt-3 p-2.5 bg-blue-50 rounded-md">
+                            <p className="text-xs font-semibold text-blue-800 mb-1">ISO 27001 Controls</p>
+                            {article.iso27001_controls.map((ctrl, ci) => (
+                              <div key={ci} className="text-xs text-blue-700 mt-1">
+                                <span className="font-mono font-medium">{ctrl.control}</span> — {ctrl.name}
+                                <p className="text-blue-600 mt-0.5">{ctrl.recommendation}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Home Network Risk */}
+                          <div className="mt-2 p-2.5 bg-amber-50 rounded-md">
+                            <p className="text-xs font-semibold text-amber-800 mb-1">Home Network Impact</p>
+                            <p className="text-xs text-amber-700">{article.home_network_risk}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
-          {/* 3-Column Grid */}
+          {/* Analytics: 3-Column Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
             {/* Findings by Severity */}
             <div className="card p-6">

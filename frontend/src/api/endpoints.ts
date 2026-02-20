@@ -154,13 +154,14 @@ export const nmapApi = {
 export const vulnMgmtApi = {
   metrics: () => api.get('/vulns/metrics'),
   enrichedFinding: (findingId: string) => api.get(`/vulns/finding/${findingId}/enriched`),
+  syncFromFindings: () => api.post('/vulns/create-from-findings'),
 }
 
 // Intel
 export const intelApi = {
   summary: (days: number = 7) => api.get('/intel/summary', { params: { days } }),
   dailyBrief: () => api.get('/intel/daily-brief'),
-  news: () => api.get('/intel/news'),
+  news: (force?: boolean) => api.get('/intel/news', { params: force ? { force: true } : undefined }),
   lookupCve: (cveId: string) => api.get(`/intel/cve/${cveId}`),
   lookupIp: (ip: string) => api.get(`/intel/ip/${ip}`),
   searchIoc: (indicator: string) => api.get(`/intel/ioc/${indicator}`),

@@ -220,12 +220,12 @@ async def _fetch_rss_feed(client: httpx.AsyncClient, source: str, url: str) -> l
 
 
 @router.get("/news")
-async def security_news():
+async def security_news(force: bool = Query(False)):
     """Fetch security news from RSS feeds with ISO 27001 recommendations."""
     global _news_cache, _news_cache_time
 
-    # Return cached data if fresh
-    if _news_cache["articles"] and (time.time() - _news_cache_time) < _news_cache_ttl:
+    # Return cached data if fresh (unless force refresh)
+    if not force and _news_cache["articles"] and (time.time() - _news_cache_time) < _news_cache_ttl:
         return _news_cache
 
     all_articles = []

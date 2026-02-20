@@ -9,9 +9,11 @@ import { reportsApi } from '../../api/endpoints'
 
 interface GeneratedReport {
   type: string
+  actualType?: string
   status: 'generating' | 'done' | 'error'
   reportId?: string
   error?: string
+  note?: string
 }
 
 interface SummaryData {
@@ -88,8 +90,10 @@ export default function ReportsPage() {
         )
       } else {
         const reportId = res.data?.report_id || res.data?.id
+        const actualType = res.data?.report_type || type
+        const note = res.data?.note
         setReports((prev) =>
-          prev.map((r) => (r.type === type ? { ...r, status: 'done', reportId } : r))
+          prev.map((r) => (r.type === type ? { ...r, status: 'done', reportId, actualType, note } : r))
         )
       }
     } catch (err: any) {
@@ -100,14 +104,18 @@ export default function ReportsPage() {
     setGenerating(null)
   }
 
-  const handleDownload = async (reportId: string, type: string) => {
+  const handleDownload = async (reportId: string, type: string, actualType?: string) => {
     try {
       const res = await reportsApi.download(reportId)
-      const blob = new Blob([res.data])
+      const effectiveType = actualType || type
+      const mimeTypes: Record<string, string> = {
+        html: 'text/html', pdf: 'application/pdf', json: 'application/json', csv: 'text/csv',
+      }
+      const blob = new Blob([res.data], { type: mimeTypes[effectiveType] || 'application/octet-stream' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      const ext = type === 'html' ? 'html' : type === 'csv' ? 'csv' : type === 'pdf' ? 'pdf' : 'json'
+      const ext = effectiveType === 'html' ? 'html' : effectiveType === 'csv' ? 'csv' : effectiveType === 'pdf' ? 'pdf' : 'json'
       a.download = `security-report.${ext}`
       a.click()
       URL.revokeObjectURL(url)
@@ -258,13 +266,19 @@ export default function ReportsPage() {
                   <div className="flex items-center gap-2 text-sm text-green-600">
                     <CheckCircle2 className="w-4 h-4" /> Report generated
                   </div>
+                  {existing.note && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{existing.note}</span>
+                    </div>
+                  )}
                   <button
-                    onClick={() => handleDownload(existing.reportId!, r.type)}
+                    onClick={() => handleDownload(existing.reportId!, r.type, existing.actualType)}
                     className="btn-primary w-full flex items-center justify-center gap-2"
                   >
-                    <Download className="w-4 h-4" /> Download
+                    <Download className="w-4 h-4" /> Download {existing.actualType && existing.actualType !== r.type ? `(${existing.actualType.toUpperCase()})` : ''}
                   </button>
-                  {r.type === 'html' && (
+                  {(r.type === 'html' || existing.actualType === 'html') && (
                     <button
                       onClick={() => handlePreview(existing.reportId!)}
                       className="btn-secondary w-full flex items-center justify-center gap-2"

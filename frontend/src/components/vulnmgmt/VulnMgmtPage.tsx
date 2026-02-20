@@ -7,7 +7,7 @@ import {
   ShieldAlert, Timer, Bug, FileText,
 } from 'lucide-react'
 import api from '../../api/client'
-import { vulnMgmtApi, risksApi } from '../../api/endpoints'
+import { vulnMgmtApi, risksApi, assetsApi } from '../../api/endpoints'
 
 interface FindingInfo {
   id: string
@@ -83,6 +83,12 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
   const [riskImpact, setRiskImpact] = useState('moderate')
   const [riskCreating, setRiskCreating] = useState(false)
 
+  // Sync vulns
+  const [syncing, setSyncing] = useState(false)
+
+  // Asset cache for finding rows
+  const [assetCache, setAssetCache] = useState<Record<string, { hostname: string | null; ip_address: string }>>({})
+
   // Status change comment
   const [commentFor, setCommentFor] = useState<string | null>(null)
   const [comment, setComment] = useState('')
@@ -94,9 +100,10 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
   async function loadData() {
     setLoading(true)
     try {
-      const [findingsRes, metricsRes] = await Promise.allSettled([
+      const [findingsRes, metricsRes, assetsRes] = await Promise.allSettled([
         api.get('/findings', { params: { page_size: 200 } }),
         vulnMgmtApi.metrics(),
+        assetsApi.list({ page_size: 200 }),
       ])
       if (findingsRes.status === 'fulfilled') {
         setFindings(findingsRes.value.data.items || [])
@@ -104,10 +111,28 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
       if (metricsRes.status === 'fulfilled') {
         setMetrics(metricsRes.value.data)
       }
+      if (assetsRes.status === 'fulfilled') {
+        const cache: Record<string, { hostname: string | null; ip_address: string }> = {}
+        for (const a of (assetsRes.value.data.items || [])) {
+          cache[a.id] = { hostname: a.hostname, ip_address: a.ip_address }
+        }
+        setAssetCache(cache)
+      }
     } catch (err: any) {
       console.error('Failed to load vuln data:', err.message)
     }
     setLoading(false)
+  }
+
+  async function handleSync() {
+    setSyncing(true)
+    try {
+      await vulnMgmtApi.syncFromFindings()
+      await loadData()
+    } catch (err: any) {
+      console.error('Failed to sync vulnerabilities:', err.message)
+    }
+    setSyncing(false)
   }
 
   async function selectFinding(findingId: string) {
@@ -248,15 +273,41 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
       )}
 
       {/* Top Metrics Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
-        <MetricCard icon={AlertTriangle} color="text-red-500" label="Open" value={metrics?.open ?? statusCounts['open'] ?? 0} />
-        <MetricCard icon={Clock} color="text-yellow-500" label="In Progress" value={metrics?.in_progress ?? statusCounts['in_progress'] ?? 0} />
-        <MetricCard icon={CheckCircle2} color="text-green-500" label="Fixed" value={metrics?.fixed ?? statusCounts['fixed'] ?? 0} />
-        <MetricCard icon={Shield} color="text-blue-500" label="Accepted" value={(metrics?.accepted ?? 0) + (metrics?.exception ?? 0)} />
-        <MetricCard icon={CheckCircle2} color="text-emerald-600" label="Verified" value={metrics?.verified ?? statusCounts['verified'] ?? 0} />
-        <MetricCard icon={ShieldAlert} color="text-red-600" label="SLA Breached" value={metrics?.sla_breached ?? 0} highlight={!!metrics?.sla_breached} />
-        <MetricCard icon={Timer} color="text-purple-500" label="MTTR (days)" value={metrics?.mttr_days ?? 0} />
-      </div>
+      {(() => {
+        // When vuln table is empty (metrics.total === 0), fall back to findings-based counts
+        const useFindings = !metrics || metrics.total === 0
+        const open = useFindings ? (statusCounts['open'] ?? 0) : metrics!.open
+        const inProgress = useFindings ? (statusCounts['in_progress'] ?? 0) : metrics!.in_progress
+        const fixed = useFindings ? (statusCounts['fixed'] ?? 0) : metrics!.fixed
+        const accepted = useFindings
+          ? (statusCounts['accepted'] ?? 0) + (statusCounts['exception'] ?? 0)
+          : (metrics!.accepted ?? 0) + (metrics!.exception ?? 0)
+        const verified = useFindings ? (statusCounts['verified'] ?? 0) : metrics!.verified
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
+            <MetricCard icon={AlertTriangle} color="text-red-500" label="Open" value={open} />
+            <MetricCard icon={Clock} color="text-yellow-500" label="In Progress" value={inProgress} />
+            <MetricCard icon={CheckCircle2} color="text-green-500" label="Fixed" value={fixed} />
+            <MetricCard icon={Shield} color="text-blue-500" label="Accepted" value={accepted} />
+            <MetricCard icon={CheckCircle2} color="text-emerald-600" label="Verified" value={verified} />
+            <MetricCard icon={ShieldAlert} color="text-red-600" label="SLA Breached" value={metrics?.sla_breached ?? 0} highlight={!!metrics?.sla_breached} />
+            <MetricCard icon={Timer} color="text-purple-500" label="MTTR (days)" value={metrics?.mttr_days ?? 0} />
+            <div className="card p-3 text-center flex flex-col items-center justify-center">
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="text-xs text-brand-600 hover:text-brand-800 font-medium flex items-center gap-1"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? 'Syncing...' : 'Sync Vulns'}
+              </button>
+              {useFindings && findings.length > 0 && (
+                <p className="text-[9px] text-amber-600 mt-1">Using findings data</p>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {loading ? (
         <div className="flex items-center justify-center h-32">
@@ -314,6 +365,7 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
                     <tr className="text-left text-gray-500 border-b bg-gray-50">
                       <SortHeader label="Severity" field="severity" current={sortField} dir={sortDir} onSort={toggleSort} />
                       <SortHeader label="Title" field="title" current={sortField} dir={sortDir} onSort={toggleSort} />
+                      <th className="px-4 py-2.5 font-medium text-xs">Asset</th>
                       <SortHeader label="Category" field="category" current={sortField} dir={sortDir} onSort={toggleSort} />
                       <SortHeader label="Exploitability" field="exploitability" current={sortField} dir={sortDir} onSort={toggleSort} />
                       <SortHeader label="Status" field="status" current={sortField} dir={sortDir} onSort={toggleSort} />
@@ -331,6 +383,18 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
                         </td>
                         <td className="px-4 py-2.5">
                           <span className="whitespace-pre-wrap">{f.title}</span>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {assetCache[f.asset_id] ? (
+                            <div className="text-xs">
+                              <span className="font-mono">{assetCache[f.asset_id].ip_address}</span>
+                              {assetCache[f.asset_id].hostname && (
+                                <span className="text-gray-500 block">{assetCache[f.asset_id].hostname}</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400">-</span>
+                          )}
                         </td>
                         <td className="px-4 py-2.5 capitalize text-gray-600">{f.category}</td>
                         <td className="px-4 py-2.5">

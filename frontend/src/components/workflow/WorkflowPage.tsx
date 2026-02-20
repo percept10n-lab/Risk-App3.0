@@ -3,7 +3,10 @@ import PageHeader from '../common/PageHeader'
 import Badge from '../common/Badge'
 import NmapConsole from '../nmap/NmapConsole'
 import { useRunStore } from '../../stores/runStore'
-import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle } from 'lucide-react'
+import { useAssetStore } from '../../stores/assetStore'
+import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle, Network, Server } from 'lucide-react'
+
+type WorkflowMode = 'cidr' | 'existing'
 
 const STEPS = [
   { key: 'discovery', label: 'Asset Discovery', description: 'Scan network for devices' },
@@ -26,6 +29,8 @@ interface WsMessage {
 
 export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
   const { runs, activeRun, loading, polling, error, fetchRuns, createRun, pauseRun, resumeRun, cancelRun, stopPolling } = useRunStore()
+  const { assets, fetchAssets } = useAssetStore()
+  const [mode, setMode] = useState<WorkflowMode>('cidr')
   const [subnet, setSubnet] = useState('192.168.178.0/24')
   const [validationError, setValidationError] = useState<string | null>(null)
   const [consoleLines, setConsoleLines] = useState<string[]>([])
@@ -34,6 +39,7 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
 
   useEffect(() => {
     fetchRuns()
+    fetchAssets()
     return () => {
       stopPolling()
       wsRef.current?.close()
@@ -128,18 +134,31 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
   }
 
   const handleNewRun = async () => {
-    const err = validateSubnet(subnet)
-    if (err) {
-      setValidationError(err)
-      return
-    }
-    setValidationError(null)
-    setConsoleLines([`$ Starting assessment pipeline on ${subnet}`, ''])
-    wsRef.current?.close()
-
-    const run = await createRun({ scope: { subnets: [subnet] } })
-    if (run?.id) {
-      connectWebSocket(run.id)
+    if (mode === 'cidr') {
+      const err = validateSubnet(subnet)
+      if (err) {
+        setValidationError(err)
+        return
+      }
+      setValidationError(null)
+      setConsoleLines([`$ Starting assessment pipeline on ${subnet}`, ''])
+      wsRef.current?.close()
+      const run = await createRun({ scope: { subnets: [subnet] } })
+      if (run?.id) connectWebSocket(run.id)
+    } else {
+      // Use existing assets — skip discovery step
+      if (assets.length === 0) {
+        setValidationError('No existing assets found. Discover assets first or use CIDR mode.')
+        return
+      }
+      setValidationError(null)
+      setConsoleLines([`$ Starting assessment pipeline using ${assets.length} existing assets`, ''])
+      wsRef.current?.close()
+      const run = await createRun({
+        scope: { asset_ids: assets.map(a => a.id) },
+        skip_steps: ['discovery'],
+      })
+      if (run?.id) connectWebSocket(run.id)
     }
   }
 
@@ -162,14 +181,32 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
           description="Execute and monitor assessment workflows"
           actions={
             <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={subnet}
-                onChange={(e) => { setSubnet(e.target.value); setValidationError(null) }}
-                placeholder="192.168.178.0/24"
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-44"
-                disabled={!!isRunning}
-              />
+              <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                <button
+                  onClick={() => setMode('cidr')}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm ${mode === 'cidr' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  disabled={!!isRunning}
+                >
+                  <Network className="w-3.5 h-3.5" /> CIDR
+                </button>
+                <button
+                  onClick={() => setMode('existing')}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm border-l ${mode === 'existing' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  disabled={!!isRunning}
+                >
+                  <Server className="w-3.5 h-3.5" /> Existing ({assets.length})
+                </button>
+              </div>
+              {mode === 'cidr' && (
+                <input
+                  type="text"
+                  value={subnet}
+                  onChange={(e) => { setSubnet(e.target.value); setValidationError(null) }}
+                  placeholder="192.168.178.0/24"
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-44"
+                  disabled={!!isRunning}
+                />
+              )}
               <button
                 onClick={handleNewRun}
                 disabled={loading || !!isRunning}
@@ -180,6 +217,44 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
             </div>
           }
         />
+      )}
+
+      {embedded && (
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setMode('cidr')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm ${mode === 'cidr' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              disabled={!!isRunning}
+            >
+              <Network className="w-3.5 h-3.5" /> CIDR
+            </button>
+            <button
+              onClick={() => setMode('existing')}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm border-l ${mode === 'existing' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              disabled={!!isRunning}
+            >
+              <Server className="w-3.5 h-3.5" /> Existing ({assets.length})
+            </button>
+          </div>
+          {mode === 'cidr' && (
+            <input
+              type="text"
+              value={subnet}
+              onChange={(e) => { setSubnet(e.target.value); setValidationError(null) }}
+              placeholder="192.168.178.0/24"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-44"
+              disabled={!!isRunning}
+            />
+          )}
+          <button
+            onClick={handleNewRun}
+            disabled={loading || !!isRunning}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Play className="w-4 h-4" /> New Assessment Run
+          </button>
+        </div>
       )}
 
       {validationError && (

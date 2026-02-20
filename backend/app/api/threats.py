@@ -189,18 +189,28 @@ class ZoneThreatRequest(BaseModel):
 @router.post("/generate")
 async def generate_threats(request: ThreatModelRequest, db: AsyncSession = Depends(get_db)):
     """Run threat modeling for one or all assets."""
-    service = ThreatService(db)
-    return await service.run_threat_modeling(
-        asset_id=request.asset_id,
-        run_id=request.run_id,
-    )
+    try:
+        service = ThreatService(db)
+        return await service.run_threat_modeling(
+            asset_id=request.asset_id,
+            run_id=request.run_id,
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Threat generation failed: {str(e)}")
 
 
 @router.post("/zone-analysis")
 async def zone_threat_analysis(request: ZoneThreatRequest, db: AsyncSession = Depends(get_db)):
     """Run zone-level threat analysis."""
-    service = ThreatService(db)
-    return await service.run_zone_threat_analysis(
-        zone=request.zone,
-        run_id=request.run_id,
-    )
+    try:
+        service = ThreatService(db)
+        return await service.run_zone_threat_analysis(
+            zone=request.zone,
+            run_id=request.run_id,
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Zone analysis failed: {str(e)}")

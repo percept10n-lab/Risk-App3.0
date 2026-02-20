@@ -288,6 +288,9 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
         </td>
         <td className="px-4 py-3">
           <p className="font-medium text-sm">{threat.title}</p>
+          {asset && (
+            <p className="text-xs text-brand-600 font-mono mt-0.5">{asset.ip_address}{asset.hostname ? ` (${asset.hostname})` : ''}</p>
+          )}
           <p className="text-xs text-gray-500 mt-0.5 line-clamp-2" title={threat.description}>{threat.description}</p>
         </td>
         <td className="px-4 py-3">
