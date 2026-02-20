@@ -117,6 +117,7 @@ export const copilotApi = {
   suggestions: () => api.get('/copilot/suggestions'),
   chat: (message: string, conversation: Array<{ role: string; content: string }>) =>
     api.post('/copilot/chat', { message, conversation }),
+  status: () => api.get('/copilot/status'),
 }
 
 // Drift

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import PageHeader from '../common/PageHeader'
 import { Settings, Shield, Bot, Gauge, CheckCircle2, XCircle, Loader2, Clock, Plus, Play, Trash2, Radio } from 'lucide-react'
-import { settingsApi, schedulesApi, intelApi } from '../../api/endpoints'
+import { settingsApi, schedulesApi, intelApi, copilotApi } from '../../api/endpoints'
 import { formatDate } from '../../utils/format'
 import type { ScanSchedule } from '../../types'
 
@@ -171,12 +171,17 @@ export default function SettingsPage() {
     setSaving(false)
   }
 
+  const [reputationStats, setReputationStats] = useState<Record<string, { score: number; tier: string; allowed: boolean }>>({})
+
   async function testConnection() {
     setTestingConnection(true)
     setConnectionStatus('idle')
     try {
-      const res = await settingsApi.getAiConfig()
-      setConnectionStatus(res.data.enabled ? 'ok' : 'fail')
+      const res = await copilotApi.status()
+      setConnectionStatus(res.data.llm_available ? 'ok' : 'fail')
+      if (res.data.reputation) {
+        setReputationStats(res.data.reputation)
+      }
     } catch (err: any) {
       console.error('Connection test failed:', err.message)
       setConnectionStatus('fail')
@@ -507,6 +512,49 @@ export default function SettingsPage() {
           <button onClick={handleSaveAiConfig} disabled={saving} className="btn-primary">
             {saving ? 'Saving...' : 'Save AI Configuration'}
           </button>
+
+          {/* Reputation Dashboard */}
+          {Object.keys(reputationStats).length > 0 && (
+            <div className="mt-6 pt-6 border-t">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Capability Reputation</h4>
+              <p className="text-xs text-gray-400 mb-3">Per-capability trust scores based on verification outcomes</p>
+              <div className="space-y-2">
+                {Object.entries(reputationStats).map(([cap, data]) => {
+                  const tierColors: Record<string, string> = {
+                    autonomous: 'bg-green-100 text-green-700',
+                    spot_check: 'bg-blue-100 text-blue-700',
+                    supervised: 'bg-yellow-100 text-yellow-700',
+                    restricted: 'bg-orange-100 text-orange-700',
+                    quarantined: 'bg-red-100 text-red-700',
+                  }
+                  return (
+                    <div key={cap} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-700 capitalize">{cap.replace('_', ' ')}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${tierColors[data.tier] || 'bg-gray-100 text-gray-600'}`}>
+                          {data.tier.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              data.score >= 0.9 ? 'bg-green-500' :
+                              data.score >= 0.7 ? 'bg-blue-500' :
+                              data.score >= 0.5 ? 'bg-yellow-500' :
+                              data.score >= 0.3 ? 'bg-orange-500' : 'bg-red-500'
+                            }`}
+                            style={{ width: `${Math.round(data.score * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-500 w-10 text-right">{(data.score * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

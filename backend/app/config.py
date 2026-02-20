@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     ai_base_url: str = "http://localhost:11434"
     ai_model: str = "llama3.2"
     ai_api_key: str = ""
+    ai_timeout: float = 120.0
+    ai_max_tool_iterations: int = 5
 
     # Threat Intelligence
     abuseipdb_api_key: str = ""

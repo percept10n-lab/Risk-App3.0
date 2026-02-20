@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db
 from app.services.copilot_service import CopilotService
 from app.services.security_agent import SecurityAgent
+from app.agents.governed_copilot import GovernedCopilot
+from app.agents.llm_backend import LLMBackend, LLMMessage
 
 import structlog
 
@@ -20,14 +23,51 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat")
 async def agent_chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
-    """Chat with the AI Security Specialist agent."""
+    """Chat with the governed AI copilot (LLM with rule-based fallback)."""
     try:
-        agent = SecurityAgent(db)
-        response = await agent.chat(request.message, request.conversation)
+        copilot = GovernedCopilot(db)
+        response = await copilot.chat(request.message, request.conversation)
         return response
     except Exception as e:
         logger.error("Agent chat failed", error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+
+@router.get("/status")
+async def copilot_status(db: AsyncSession = Depends(get_db)):
+    """Get LLM availability and capability reputation stats."""
+    try:
+        copilot = GovernedCopilot(db)
+        return await copilot.get_status()
+    except Exception as e:
+        logger.error("Status check failed", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Status error: {str(e)}")
+
+
+@router.post("/chat/stream")
+async def agent_chat_stream(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """Stream chat response via SSE."""
+    llm = LLMBackend()
+    if not await llm.is_available():
+        raise HTTPException(status_code=503, detail="LLM not available")
+
+    from app.agents.contracts import CHAT_CONTRACT
+
+    messages = [CHAT_CONTRACT.to_system_message()]
+    for turn in request.conversation[-10:]:
+        messages.append(LLMMessage(role=turn.get("role", "user"), content=turn.get("content", "")))
+    messages.append(LLMMessage(role="user", content=request.message))
+
+    async def event_generator():
+        try:
+            async for chunk in llm.stream(messages):
+                yield f"data: {chunk}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error("Stream failed", error=str(e))
+            yield f"data: Error: {e}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 class TriageRequest(BaseModel):

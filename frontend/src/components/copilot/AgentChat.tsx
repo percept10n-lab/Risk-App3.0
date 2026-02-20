@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Send, Loader2, Shield, User, Trash2 } from 'lucide-react'
+import { Send, Loader2, Shield, User, Trash2, Cpu, Cog } from 'lucide-react'
 import { copilotApi } from '../../api/endpoints'
 import ReactMarkdown from 'react-markdown'
 
@@ -8,6 +8,16 @@ interface ChatMessage {
   content: string
   timestamp?: string
   actions?: string[]
+  source?: 'llm' | 'rule_based'
+  model?: string
+}
+
+interface LLMStatus {
+  llm_available: boolean
+  provider: string
+  model: string
+  base_url: string
+  reputation: Record<string, { score: number; tier: string; allowed: boolean }>
 }
 
 export default function AgentChat() {
@@ -30,12 +40,29 @@ export default function AgentChat() {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Fetch LLM status on mount + every 60s
+  useEffect(() => {
+    fetchStatus()
+    const interval = setInterval(fetchStatus, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  async function fetchStatus() {
+    try {
+      const res = await copilotApi.status()
+      setLlmStatus(res.data)
+    } catch {
+      setLlmStatus(null)
+    }
+  }
 
   const sendMessage = async () => {
     const trimmed = input.trim()
@@ -54,6 +81,8 @@ export default function AgentChat() {
         content: res.data.content || 'No response generated.',
         timestamp: res.data.timestamp,
         actions: res.data.actions,
+        source: res.data.source,
+        model: res.data.model,
       }
       setMessages((prev) => [...prev, assistantMsg])
     } catch (err: any) {
@@ -89,6 +118,8 @@ export default function AgentChat() {
     'MITRE mappings',
   ]
 
+  const isLlmOnline = llmStatus?.llm_available === true
+
   return (
     <div className="flex flex-col h-[calc(100vh-220px)]">
       {/* Chat Header */}
@@ -99,7 +130,22 @@ export default function AgentChat() {
           </div>
           <div>
             <h3 className="font-semibold text-sm">Security Specialist Agent</h3>
-            <p className="text-xs text-gray-500">Senior IT Security Analyst</p>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${isLlmOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
+              <p className="text-xs text-gray-500">
+                {isLlmOnline ? (
+                  <>
+                    <Cpu className="w-3 h-3 inline mr-0.5 -mt-0.5" />
+                    AI ({llmStatus?.model})
+                  </>
+                ) : (
+                  <>
+                    <Cog className="w-3 h-3 inline mr-0.5 -mt-0.5" />
+                    Rule-based
+                  </>
+                )}
+              </p>
+            </div>
           </div>
         </div>
         <button
@@ -134,11 +180,24 @@ export default function AgentChat() {
               ) : (
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               )}
-              {msg.timestamp && (
-                <p className={`text-xs mt-2 ${msg.role === 'user' ? 'text-brand-200' : 'text-gray-400'}`}>
-                  {new Date(msg.timestamp).toLocaleTimeString()}
-                </p>
-              )}
+              <div className="flex items-center gap-2 mt-2">
+                {msg.timestamp && (
+                  <p className={`text-xs ${msg.role === 'user' ? 'text-brand-200' : 'text-gray-400'}`}>
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </p>
+                )}
+                {msg.role === 'assistant' && msg.source && (
+                  <span
+                    className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                      msg.source === 'llm'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {msg.source === 'llm' ? 'AI' : 'Rule-based'}
+                  </span>
+                )}
+              </div>
             </div>
             {msg.role === 'user' && (
               <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-1">
@@ -155,7 +214,7 @@ export default function AgentChat() {
             <div className="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Analyzing...</span>
+                <span>{isLlmOnline ? 'Thinking...' : 'Analyzing...'}</span>
               </div>
             </div>
           </div>
