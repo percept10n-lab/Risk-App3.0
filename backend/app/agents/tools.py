@@ -247,6 +247,64 @@ COPILOT_TOOLS: list[ToolDefinition] = [
             "required": ["entity_type", "entity_id", "content"],
         },
     ),
+    # --- Framework tools (scan, pentest, threat modeling, pipeline) ---
+    ToolDefinition(
+        name="list_pentest_actions",
+        description="List all available pentest/security test actions with descriptions and risk levels. No parameters needed.",
+        parameters={
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    ),
+    ToolDefinition(
+        name="run_nmap_scan",
+        description="Run an nmap network scan on a target (IP or CIDR). Only RFC 1918 private ranges allowed. Requires user confirmation. Shows real-time terminal output.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "Target IP or CIDR (e.g. 192.168.1.0/24, 10.0.0.1)"},
+                "nmap_args": {"type": "string", "default": "-sV -sC", "description": "Nmap arguments (e.g. -sV -sC -p 1-1000)"},
+            },
+            "required": ["target"],
+        },
+    ),
+    ToolDefinition(
+        name="run_pentest_action",
+        description="Execute a pentest/security test action against a target. Use list_pentest_actions to see available actions. Requires user confirmation. Shows real-time terminal output.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "action_id": {"type": "string", "description": "Action ID (e.g. http_headers, tls_check, ssh_hardening, port_verify, web_vuln_probe)"},
+                "target": {"type": "string", "description": "Target IP address"},
+                "params": {"type": "object", "description": "Optional action parameters (e.g. port, use_tls)"},
+            },
+            "required": ["action_id", "target"],
+        },
+    ),
+    ToolDefinition(
+        name="run_threat_modeling",
+        description="Run C4/STRIDE threat modeling analysis on all assets or a specific asset. Requires user confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "asset_id": {"type": "string", "description": "Optional asset UUID to limit analysis to"},
+            },
+            "required": [],
+        },
+    ),
+    ToolDefinition(
+        name="start_assessment_pipeline",
+        description="Start the full 9-step assessment pipeline (nmap scan → asset import → findings → vuln assessment → threat modeling → MITRE mapping → risk analysis). Requires user confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "Target IP or CIDR for the pipeline scan"},
+                "nmap_args": {"type": "string", "default": "-sV -sC", "description": "Nmap arguments for the scan step"},
+            },
+            "required": ["target"],
+        },
+    ),
 ]
 
 # Write tools that need confirmation before execution
@@ -257,7 +315,14 @@ WRITE_TOOL_NAMES = {
     "run_risk_analysis",
     "generate_report",
     "create_note",
+    "run_nmap_scan",
+    "run_pentest_action",
+    "run_threat_modeling",
+    "start_assessment_pipeline",
 }
+
+# Tools that produce streaming terminal output (use /execute-tool/stream)
+STREAMING_TOOL_NAMES = {"run_nmap_scan", "run_pentest_action"}
 
 
 # ------------------------------------------------------------------
@@ -657,6 +722,78 @@ class ToolExecutor:
         except Exception as e:
             logger.error("Feed status check failed", error=str(e))
             return {"error": f"Feed status check failed: {e}"}
+
+    # --- Framework tools (scan, pentest, threat modeling, pipeline) ---
+
+    async def _tool_list_pentest_actions(self) -> dict:
+        """Return all available pentest actions."""
+        from app.services.pentest_service import AVAILABLE_ACTIONS
+        return {"actions": AVAILABLE_ACTIONS}
+
+    async def _tool_run_nmap_scan(
+        self, target: str, nmap_args: str = "-sV -sC"
+    ) -> dict:
+        """Validate scope and return pending confirmation for nmap scan."""
+        from app.services.nmap_service import NmapService
+        svc = NmapService(self.db)
+        if not svc.validate_scope(target):
+            return {"error": f"Target {target} is outside allowed scope (RFC 1918 private ranges only)"}
+        valid, msg = svc.validate_nmap_args(nmap_args)
+        if not valid:
+            return {"error": f"Invalid nmap arguments: {msg}"}
+        return {
+            "pending_confirmation": True,
+            "tool": "run_nmap_scan",
+            "description": f"Run nmap scan on {target} with args: {nmap_args}",
+            "args": {"target": target, "nmap_args": nmap_args},
+        }
+
+    async def _tool_run_pentest_action(
+        self, action_id: str, target: str, params: dict | None = None
+    ) -> dict:
+        """Validate and return pending confirmation for pentest action."""
+        from app.services.pentest_service import AVAILABLE_ACTIONS, PentestService
+        if action_id not in AVAILABLE_ACTIONS:
+            available = ", ".join(AVAILABLE_ACTIONS.keys())
+            return {"error": f"Unknown action: {action_id}. Available: {available}"}
+        svc = PentestService(self.db)
+        if not svc.validate_scope(target):
+            return {"error": f"Target {target} is outside allowed scope (RFC 1918 private ranges only)"}
+        action_info = AVAILABLE_ACTIONS[action_id]
+        return {
+            "pending_confirmation": True,
+            "tool": "run_pentest_action",
+            "description": f"Run {action_info['name']} on {target} (risk: {action_info['risk']})",
+            "args": {"action_id": action_id, "target": target, "params": params or {}},
+        }
+
+    async def _tool_run_threat_modeling(self, asset_id: str | None = None) -> dict:
+        """Return pending confirmation for threat modeling."""
+        desc = f"threat modeling on asset {asset_id}" if asset_id else "full C4/STRIDE threat modeling on all assets"
+        return {
+            "pending_confirmation": True,
+            "tool": "run_threat_modeling",
+            "description": f"Run {desc}",
+            "args": {"asset_id": asset_id},
+        }
+
+    async def _tool_start_assessment_pipeline(
+        self, target: str, nmap_args: str = "-sV -sC"
+    ) -> dict:
+        """Validate scope and return pending confirmation for full pipeline."""
+        from app.services.nmap_service import NmapService
+        svc = NmapService(self.db)
+        if not svc.validate_scope(target):
+            return {"error": f"Target {target} is outside allowed scope (RFC 1918 private ranges only)"}
+        valid, msg = svc.validate_nmap_args(nmap_args)
+        if not valid:
+            return {"error": f"Invalid nmap arguments: {msg}"}
+        return {
+            "pending_confirmation": True,
+            "tool": "start_assessment_pipeline",
+            "description": f"Start full assessment pipeline on {target} (nmap → assets → findings → vuln → threat → MITRE → risk)",
+            "args": {"target": target, "nmap_args": nmap_args},
+        }
 
     # --- Write tools (return pending_confirmation) ---
 

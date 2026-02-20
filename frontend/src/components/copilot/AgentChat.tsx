@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Loader2, Shield, User, Trash2, Cpu, Cog, Wrench, CheckCircle2, XCircle } from 'lucide-react'
+import { Send, Loader2, Shield, User, Trash2, Cpu, Cog, Wrench, CheckCircle2, XCircle, Terminal, ChevronDown, ChevronUp } from 'lucide-react'
 import { copilotApi } from '../../api/endpoints'
 import ReactMarkdown from 'react-markdown'
 
@@ -11,13 +11,16 @@ interface ChatMessage {
   source?: 'llm' | 'rule_based'
   model?: string
   pendingAction?: PendingAction | null
+  terminalLines?: string[]
+  terminalCollapsed?: boolean
+  streamAnalysis?: string
 }
 
 interface PendingAction {
   tool: string
   args: Record<string, any>
   description: string
-  status: 'pending' | 'approved' | 'denied' | 'executed'
+  status: 'pending' | 'approved' | 'denied' | 'executed' | 'streaming'
   result?: string
 }
 
@@ -33,14 +36,99 @@ interface AgentChatProps {
   context?: Record<string, any>
 }
 
+// Tools that produce streaming terminal output
+const STREAMING_TOOLS = new Set(['run_nmap_scan', 'run_pentest_action'])
+
 const INITIAL_QUICK_ACTIONS = [
   "How's my security?",
   'Show critical findings',
-  'Triage findings',
+  'Scan my network',
+  'List security tests',
+  'Run threat modeling',
   'What are my top risks?',
-  'List my assets',
-  'MITRE mappings',
 ]
+
+/* ── Terminal line color logic (reused from NmapConsole) ── */
+function terminalColorClass(line: string): string {
+  if (line.includes('ERROR') || line.includes('failed') || line.includes('FAIL') || line.includes('REJECTED')) return 'text-red-400'
+  if (line.includes('WARNING') || line.includes('⚠')) return 'text-yellow-400'
+  if (line.includes('✓') || line.includes('Complete') || line.includes('completed') || line.includes('finished') || line.includes('success')) return 'text-emerald-400'
+  if (line.startsWith('[') && line.includes('] >>')) return 'text-cyan-400'
+  if (line.startsWith('$')) return 'text-blue-400'
+  if (line.includes('critical') || line.includes('CRITICAL')) return 'text-red-300'
+  if (line.includes('high') || line.includes('HIGH')) return 'text-orange-400'
+  if (line.includes('medium') || line.includes('MEDIUM')) return 'text-yellow-300'
+  return 'text-green-400'
+}
+
+/* ── Inline Terminal Embed ── */
+function TerminalEmbed({
+  lines,
+  collapsed,
+  onToggle,
+  isActive,
+}: {
+  lines: string[]
+  collapsed: boolean
+  onToggle: () => void
+  isActive: boolean
+}) {
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!collapsed) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [lines.length, collapsed])
+
+  return (
+    <div className="rounded-lg overflow-hidden border border-gray-800 mt-2">
+      {/* Header */}
+      <button
+        onClick={onToggle}
+        className="w-full bg-gray-900 px-3 py-1.5 flex items-center justify-between hover:bg-gray-800 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <Terminal className="w-3.5 h-3.5 text-gray-400" />
+          <span className="text-xs font-medium text-gray-300">Terminal Output</span>
+          {isActive && (
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+            </span>
+          )}
+          {!isActive && lines.length > 0 && (
+            <span className="text-xs text-gray-500">({lines.length} lines)</span>
+          )}
+        </div>
+        {collapsed ? (
+          <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+        ) : (
+          <ChevronUp className="w-3.5 h-3.5 text-gray-500" />
+        )}
+      </button>
+
+      {/* Terminal body */}
+      {!collapsed && (
+        <div className="bg-gray-950 p-3 font-mono text-xs max-h-64 overflow-y-auto">
+          {lines.length === 0 ? (
+            <span className="text-gray-600">Waiting for output...</span>
+          ) : (
+            lines.map((line, i) => (
+              <div key={i} className={`whitespace-pre-wrap break-all leading-relaxed ${terminalColorClass(line)}`}>
+                {line}
+              </div>
+            ))
+          )}
+          {isActive && (
+            <span className="inline-block w-1.5 h-3 bg-green-500 animate-pulse" />
+          )}
+          <div ref={bottomRef} />
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function AgentChat({ context }: AgentChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -50,13 +138,14 @@ export default function AgentChat({ context }: AgentChatProps) {
         "I'm your **AI Security Specialist** — a senior IT security analyst with expertise in " +
         "network security, vulnerability management, threat modeling (C4/STRIDE), risk assessment " +
         "(ISO 27005), and incident response.\n\n" +
-        "I have full access to your assessment data and can perform actions with your authorization.\n\n" +
+        "I have full access to your assessment data and can **run nmap scans**, **execute security tests**, " +
+        "**perform threat modeling**, and **trigger the assessment pipeline** — all with your authorization.\n\n" +
         "Try asking me:\n" +
-        '- "How\'s my security posture?"\n' +
-        '- "Show me critical findings"\n' +
-        '- "Triage my findings"\n' +
-        '- "What threats affect my network?"\n' +
-        '- "How do I secure my router?"',
+        '- "Scan 192.168.1.0/24 with nmap"\n' +
+        '- "Run HTTP security headers check on 192.168.1.1"\n' +
+        '- "List available security tests"\n' +
+        '- "Run threat modeling"\n' +
+        '- "How\'s my security posture?"',
       timestamp: new Date().toISOString(),
     },
   ])
@@ -66,13 +155,19 @@ export default function AgentChat({ context }: AgentChatProps) {
   const [activeTools, setActiveTools] = useState<string[]>([])
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [llmStatus, setLlmStatus] = useState<LLMStatus | null>(null)
+  // Streaming terminal state
+  const [terminalLines, setTerminalLines] = useState<string[]>([])
+  const [terminalVisible, setTerminalVisible] = useState(false)
+  const [streamingAnalysis, setStreamingAnalysis] = useState('')
+  const [isToolStreaming, setIsToolStreaming] = useState(false)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingContent])
+  }, [messages, streamingContent, terminalLines, streamingAnalysis])
 
   useEffect(() => {
     fetchStatus()
@@ -128,6 +223,7 @@ export default function AgentChat({ context }: AgentChatProps) {
       let source: 'llm' | 'rule_based' = 'llm'
       let model: string | undefined
       let doneSuggestions: string[] = []
+      let pendingAction: PendingAction | null = null
 
       while (true) {
         const { done, value } = await reader.read()
@@ -160,9 +256,16 @@ export default function AgentChat({ context }: AgentChatProps) {
                 collectedContent += event.content
                 setStreamingContent(collectedContent)
                 break
-              case 'pending_action':
-                // Will be handled in Phase 4
+              case 'pending_action': {
+                const act = event.action || event
+                pendingAction = {
+                  tool: act.tool,
+                  args: act.args,
+                  description: act.description,
+                  status: 'pending',
+                }
                 break
+              }
               case 'done':
                 source = event.source || 'llm'
                 model = event.model
@@ -193,6 +296,7 @@ export default function AgentChat({ context }: AgentChatProps) {
           timestamp: new Date().toISOString(),
           source,
           model,
+          pendingAction,
         },
       ])
       setSuggestions(doneSuggestions)
@@ -257,28 +361,151 @@ export default function AgentChat({ context }: AgentChatProps) {
     const msg = messages[msgIndex]
     if (!msg?.pendingAction) return
 
+    const isStreamingTool = STREAMING_TOOLS.has(msg.pendingAction.tool)
+
+    if (isStreamingTool) {
+      // Use streaming execute endpoint
+      await handleStreamingToolExecution(msgIndex, msg.pendingAction)
+    } else {
+      // Use standard execute endpoint
+      try {
+        const res = await copilotApi.executeTool({
+          tool: msg.pendingAction.tool,
+          args: msg.pendingAction.args,
+        })
+        setMessages((prev) => {
+          const updated = [...prev]
+          if (updated[msgIndex]?.pendingAction) {
+            updated[msgIndex].pendingAction!.status = 'executed'
+            updated[msgIndex].pendingAction!.result = res.data.result || 'Action completed.'
+          }
+          return updated
+        })
+      } catch (err: any) {
+        setMessages((prev) => {
+          const updated = [...prev]
+          if (updated[msgIndex]?.pendingAction) {
+            updated[msgIndex].pendingAction!.status = 'denied'
+            updated[msgIndex].pendingAction!.result = `Error: ${err.response?.data?.detail || err.message}`
+          }
+          return updated
+        })
+      }
+    }
+  }
+
+  const handleStreamingToolExecution = async (msgIndex: number, action: PendingAction) => {
+    // Set streaming state
+    setIsToolStreaming(true)
+    setTerminalLines([])
+    setTerminalVisible(true)
+    setStreamingAnalysis('')
+
+    // Mark action as streaming
+    setMessages((prev) => {
+      const updated = [...prev]
+      if (updated[msgIndex]?.pendingAction) {
+        updated[msgIndex].pendingAction!.status = 'streaming'
+      }
+      return updated
+    })
+
     try {
-      const res = await copilotApi.executeTool({
-        tool: msg.pendingAction.tool,
-        args: msg.pendingAction.args,
+      const resp = await copilotApi.executeToolStream({
+        tool: action.tool,
+        args: action.args,
       })
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}: ${resp.statusText}`)
+      }
+
+      const reader = resp.body?.getReader()
+      if (!reader) throw new Error('No response body')
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let collectedTerminalLines: string[] = []
+      let collectedAnalysis = ''
+      let doneSuggestions: string[] = []
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const data = line.slice(6).trim()
+          if (data === '[DONE]') continue
+
+          try {
+            const event = JSON.parse(data)
+
+            switch (event.type) {
+              case 'status':
+                collectedTerminalLines.push(event.message)
+                setTerminalLines([...collectedTerminalLines])
+                break
+              case 'terminal_line':
+                collectedTerminalLines.push(event.line)
+                setTerminalLines([...collectedTerminalLines])
+                break
+              case 'result':
+                // Result summary received, terminal phase complete
+                collectedTerminalLines.push('--- Scan complete ---')
+                setTerminalLines([...collectedTerminalLines])
+                break
+              case 'token':
+                // LLM analysis streaming
+                collectedAnalysis += event.content
+                setStreamingAnalysis(collectedAnalysis)
+                break
+              case 'done':
+                doneSuggestions = event.suggestions || []
+                break
+              case 'error':
+                collectedTerminalLines.push(`ERROR: ${event.message}`)
+                setTerminalLines([...collectedTerminalLines])
+                break
+            }
+          } catch {
+            // ignore non-JSON
+          }
+        }
+      }
+
+      // Finalize: update the message with terminal output and analysis
       setMessages((prev) => {
         const updated = [...prev]
         if (updated[msgIndex]?.pendingAction) {
           updated[msgIndex].pendingAction!.status = 'executed'
-          updated[msgIndex].pendingAction!.result = res.data.result || 'Action completed.'
+          updated[msgIndex].pendingAction!.result = 'Completed successfully.'
         }
+        updated[msgIndex].terminalLines = collectedTerminalLines
+        updated[msgIndex].terminalCollapsed = true
+        updated[msgIndex].streamAnalysis = collectedAnalysis
         return updated
       })
+
+      setSuggestions(doneSuggestions)
     } catch (err: any) {
       setMessages((prev) => {
         const updated = [...prev]
         if (updated[msgIndex]?.pendingAction) {
           updated[msgIndex].pendingAction!.status = 'denied'
-          updated[msgIndex].pendingAction!.result = `Error: ${err.response?.data?.detail || err.message}`
+          updated[msgIndex].pendingAction!.result = `Error: ${err.message}`
         }
         return updated
       })
+    } finally {
+      setIsToolStreaming(false)
+      setTerminalVisible(false)
+      setTerminalLines([])
+      setStreamingAnalysis('')
     }
   }
 
@@ -294,6 +521,10 @@ export default function AgentChat({ context }: AgentChatProps) {
     setSuggestions([])
     setStreamingContent('')
     setActiveTools([])
+    setTerminalLines([])
+    setTerminalVisible(false)
+    setStreamingAnalysis('')
+    setIsToolStreaming(false)
   }
 
   const isLlmOnline = llmStatus?.llm_available === true
@@ -397,8 +628,58 @@ export default function AgentChat({ context }: AgentChatProps) {
                 />
               </div>
             )}
+
+            {/* Completed terminal output (persisted on message) */}
+            {msg.terminalLines && msg.terminalLines.length > 0 && (
+              <div className="ml-11 mt-2 max-w-[85%]">
+                <TerminalEmbed
+                  lines={msg.terminalLines}
+                  collapsed={msg.terminalCollapsed ?? true}
+                  onToggle={() => {
+                    setMessages((prev) => {
+                      const updated = [...prev]
+                      updated[i] = { ...updated[i], terminalCollapsed: !updated[i].terminalCollapsed }
+                      return updated
+                    })
+                  }}
+                  isActive={false}
+                />
+              </div>
+            )}
+
+            {/* Completed analysis (persisted on message) */}
+            {msg.streamAnalysis && (
+              <div className="ml-11 mt-2 max-w-[85%]">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm">
+                  <div className="prose prose-sm max-w-none prose-headings:text-gray-800 prose-headings:mt-3 prose-headings:mb-2 prose-p:my-1 prose-li:my-0.5 prose-code:text-brand-700 prose-code:bg-brand-50 prose-code:px-1 prose-code:rounded prose-strong:text-gray-800">
+                    <ReactMarkdown>{msg.streamAnalysis}</ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ))}
+
+        {/* Active streaming terminal (while tool is running) */}
+        {isToolStreaming && terminalVisible && (
+          <div className="ml-11 max-w-[85%]">
+            <TerminalEmbed
+              lines={terminalLines}
+              collapsed={false}
+              onToggle={() => {}}
+              isActive={true}
+            />
+            {/* Streaming AI analysis below terminal */}
+            {streamingAnalysis && (
+              <div className="mt-2 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm">
+                <div className="prose prose-sm max-w-none prose-headings:text-gray-800 prose-headings:mt-3 prose-headings:mb-2 prose-p:my-1 prose-li:my-0.5 prose-code:text-brand-700 prose-code:bg-brand-50 prose-code:px-1 prose-code:rounded prose-strong:text-gray-800">
+                  <ReactMarkdown>{streamingAnalysis}</ReactMarkdown>
+                </div>
+                <span className="inline-block w-1.5 h-4 bg-brand-500 animate-pulse ml-0.5 -mb-0.5" />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Streaming indicator */}
         {isStreaming && (
@@ -441,7 +722,7 @@ export default function AgentChat({ context }: AgentChatProps) {
       </div>
 
       {/* Suggestion Chips */}
-      {displaySuggestions.length > 0 && !isStreaming && (
+      {displaySuggestions.length > 0 && !isStreaming && !isToolStreaming && (
         <div className="px-4 pb-2">
           <div className="flex flex-wrap gap-2">
             {displaySuggestions.map((action) => (
@@ -471,13 +752,13 @@ export default function AgentChat({ context }: AgentChatProps) {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about your security posture, findings, risks..."
+          placeholder="Ask about security, scan networks, run tests..."
           className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-          disabled={isStreaming}
+          disabled={isStreaming || isToolStreaming}
         />
         <button
           type="submit"
-          disabled={!input.trim() || isStreaming}
+          disabled={!input.trim() || isStreaming || isToolStreaming}
           className="px-4 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
         >
           <Send className="w-4 h-4" />
@@ -521,11 +802,31 @@ function ActionConfirmationCard({
     )
   }
 
+  if (action.status === 'streaming') {
+    return (
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm">
+        <div className="flex items-center gap-2 text-blue-700 font-medium">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Running...
+        </div>
+        <p className="text-blue-600 mt-1 text-xs">{action.description}</p>
+      </div>
+    )
+  }
+
+  const isStreamingTool = STREAMING_TOOLS.has(action.tool)
+
   return (
     <div className="bg-amber-50 border-2 border-amber-200 rounded-lg px-4 py-3">
       <div className="flex items-center gap-2 mb-2">
-        <Wrench className="w-4 h-4 text-amber-600" />
-        <span className="text-sm font-medium text-amber-800">Action Requires Approval</span>
+        {isStreamingTool ? (
+          <Terminal className="w-4 h-4 text-amber-600" />
+        ) : (
+          <Wrench className="w-4 h-4 text-amber-600" />
+        )}
+        <span className="text-sm font-medium text-amber-800">
+          {isStreamingTool ? 'Scan Requires Approval' : 'Action Requires Approval'}
+        </span>
       </div>
       <p className="text-sm text-amber-700 mb-1">{action.description}</p>
       <p className="text-xs text-amber-600 mb-3 font-mono">
@@ -536,7 +837,7 @@ function ActionConfirmationCard({
           onClick={onApprove}
           className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700"
         >
-          Approve
+          {isStreamingTool ? 'Approve & Run' : 'Approve'}
         </button>
         <button
           onClick={onDeny}

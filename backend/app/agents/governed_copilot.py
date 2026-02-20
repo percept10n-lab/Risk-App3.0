@@ -242,6 +242,115 @@ class GovernedCopilot:
             yield {"type": "token", "content": result.get("content", "")}
             yield {"type": "done", "source": "rule_based", "suggestions": []}
 
+    async def analyze_tool_result(
+        self, tool_name: str, args: dict, result_summary: str
+    ):
+        """Async generator — analyze tool execution results from a risk perspective.
+        Yields SSE event dicts with type 'token' for streaming analysis text.
+        Falls back to rule-based suggestions if LLM unavailable.
+        """
+        target = args.get("target", args.get("action_id", ""))
+
+        # Try LLM analysis
+        llm_available = await self.llm.is_available()
+        if llm_available and await self.reputation.is_allowed("chat"):
+            try:
+                messages = [
+                    CHAT_CONTRACT.to_system_message(),
+                    LLMMessage(
+                        role="user",
+                        content=(
+                            f"I just ran **{tool_name}** on `{target}`. Here are the results:\n\n"
+                            f"```\n{result_summary[:3000]}\n```\n\n"
+                            "Analyze these results from a **risk perspective**. "
+                            "Identify the most important security concerns, explain their impact, "
+                            "and suggest concrete next actions I should take."
+                        ),
+                    ),
+                ]
+
+                async for event in self.llm.stream_with_tools(
+                    messages=messages,
+                    tools=COPILOT_TOOLS,
+                    tool_executor=self.tool_executor.execute,
+                ):
+                    if event["type"] == "token":
+                        yield event
+
+                return
+            except Exception as e:
+                logger.error("LLM analysis failed, using rule-based", error=str(e))
+
+        # Rule-based fallback analysis
+        fallback = self._rule_based_analysis(tool_name, args, result_summary)
+        yield {"type": "token", "content": fallback}
+
+    @staticmethod
+    def _rule_based_analysis(tool_name: str, args: dict, result_summary: str) -> str:
+        """Generate rule-based analysis when LLM is unavailable."""
+        lines = []
+        summary_lower = result_summary.lower()
+
+        if tool_name == "run_nmap_scan":
+            lines.append("## Scan Analysis\n")
+            if "open" in summary_lower:
+                lines.append("Open ports were detected. Review each service for:")
+                lines.append("- Unnecessary exposure (close unused ports)")
+                lines.append("- Missing encryption (replace Telnet/FTP with SSH/SFTP)")
+                lines.append("- Default credentials on admin interfaces")
+            if "high" in summary_lower or "critical" in summary_lower:
+                lines.append("\n**High-risk services detected.** Prioritize these for immediate remediation.")
+            else:
+                lines.append("\nNo critical exposures found in this scan.")
+        elif tool_name == "run_pentest_action":
+            lines.append("## Security Test Results\n")
+            if "finding" in summary_lower:
+                lines.append("Findings were generated. Review severity levels and apply fixes.")
+            else:
+                lines.append("Test completed with no significant findings.")
+        else:
+            lines.append("## Results Summary\n")
+            lines.append("Tool execution completed. Review the output above for details.")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _extract_scan_suggestions(tool_name: str, args: dict, result_summary: str) -> list[str]:
+        """Extract follow-up suggestions specific to scan/tool results."""
+        suggestions = []
+        summary_lower = result_summary.lower()
+        target = args.get("target", "")
+
+        if tool_name == "run_nmap_scan":
+            if "open" in summary_lower and ("80" in summary_lower or "443" in summary_lower or "http" in summary_lower):
+                suggestions.append(f"Run HTTP security headers check on {target}")
+            if "open" in summary_lower and ("443" in summary_lower or "tls" in summary_lower or "ssl" in summary_lower):
+                suggestions.append(f"Check TLS configuration on {target}")
+            if "open" in summary_lower and ("22" in summary_lower or "ssh" in summary_lower):
+                suggestions.append(f"Run SSH hardening check on {target}")
+            if "open" in summary_lower:
+                suggestions.append("Run threat modeling")
+                suggestions.append(f"Run vulnerability probe on {target}")
+        elif tool_name == "run_pentest_action":
+            action_id = args.get("action_id", "")
+            if "finding" in summary_lower or "vuln" in summary_lower:
+                suggestions.append(f"Run exploit chain analysis on {target}")
+                suggestions.append("Generate security report")
+            if action_id == "http_headers":
+                suggestions.append(f"Check TLS configuration on {target}")
+            if action_id == "tls_check":
+                suggestions.append(f"Run web vulnerability probe on {target}")
+        elif tool_name == "run_threat_modeling":
+            suggestions.append("View MITRE ATT&CK mappings")
+            suggestions.append("Run risk analysis")
+            suggestions.append("Generate threat report")
+        elif tool_name == "start_assessment_pipeline":
+            suggestions.append("Show security posture")
+            suggestions.append("Show critical findings")
+            suggestions.append("Generate executive report")
+
+        return suggestions[:4]
+
     @staticmethod
     def _extract_suggestions(content: str, user_message: str) -> list[str]:
         """Extract follow-up suggestions based on response content."""
@@ -263,6 +372,11 @@ class GovernedCopilot:
         if "critical" in content_lower or "high" in content_lower:
             suggestions.append("Generate a report")
             suggestions.append("Start remediation workflow")
+        # Scan-specific suggestions
+        if "nmap" in content_lower or "scan" in content_lower:
+            suggestions.append("Run security tests on discovered hosts")
+        if "open port" in content_lower:
+            suggestions.append("Check HTTP headers on exposed services")
 
         # Keep max 4 unique suggestions
         seen = set()

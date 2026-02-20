@@ -161,6 +161,29 @@ async def execute_tool(request: ExecuteToolRequest, db: AsyncSession = Depends(g
             db.add(event)
             result = "Note created."
 
+        elif tool == "run_threat_modeling":
+            from app.services.threat_service import ThreatService
+            service = ThreatService(db)
+            tm_result = await service.run_full_threat_modeling(asset_ids=[args["asset_id"]] if args.get("asset_id") else None)
+            await db.commit()
+            result = f"Threat modeling complete: {tm_result.get('threats_created', 0)} threats created across {tm_result.get('total_assets', 0)} assets"
+
+        elif tool == "start_assessment_pipeline":
+            from app.services.nmap_service import NmapService
+            import uuid as _uuid
+            run_id = str(_uuid.uuid4())
+            service = NmapService(db)
+            pipeline_result = await service.run_full_pipeline(
+                target=args["target"],
+                nmap_args=args.get("nmap_args", "-sV -sC"),
+                run_id=run_id,
+            )
+            result = (
+                f"Pipeline complete (run_id: {run_id}). "
+                f"Findings: {pipeline_result.get('findings_created', 0)} created. "
+                f"Steps: {', '.join(pipeline_result.get('steps', {}).keys())}"
+            )
+
         else:
             raise HTTPException(status_code=400, detail=f"Unknown tool: {tool}")
 
@@ -183,6 +206,140 @@ async def execute_tool(request: ExecuteToolRequest, db: AsyncSession = Depends(g
     except Exception as e:
         logger.error("Tool execution failed", tool=tool, error=str(e), exc_info=True)
         raise HTTPException(status_code=500, detail=f"Tool execution failed: {str(e)}")
+
+
+@router.post("/execute-tool/stream")
+async def execute_tool_stream(request: ExecuteToolRequest, db: AsyncSession = Depends(get_db)):
+    """Execute a streaming tool action via SSE. Streams terminal output, then LLM analysis."""
+    import json as _json
+    import uuid as _uuid
+    import asyncio
+
+    from app.api.ws import manager as ws_manager
+    from app.agents.tools import STREAMING_TOOL_NAMES
+
+    tool = request.tool
+    args = request.args
+
+    if tool not in STREAMING_TOOL_NAMES:
+        raise HTTPException(status_code=400, detail=f"Tool {tool} does not support streaming. Use /execute-tool instead.")
+
+    job_id = str(_uuid.uuid4())
+
+    async def event_generator():
+        queue = ws_manager.subscribe(job_id)
+        tool_result = None
+
+        try:
+            # Yield initial event
+            yield f"data: {_json.dumps({'type': 'status', 'message': f'Starting {tool}...', 'job_id': job_id})}\n\n"
+
+            # Run the tool in a background task
+            tool_task = asyncio.create_task(
+                _run_streaming_tool(tool, args, job_id, db)
+            )
+
+            # Read from queue until the tool task completes
+            while not tool_task.done():
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=0.5)
+                    # Convert WS broadcast messages to SSE terminal lines
+                    line = msg.get("line", "") if isinstance(msg, dict) else str(msg)
+                    if not line and isinstance(msg, dict):
+                        line = msg.get("detail", _json.dumps(msg))
+                    yield f"data: {_json.dumps({'type': 'terminal_line', 'line': line})}\n\n"
+                except asyncio.TimeoutError:
+                    continue
+
+            # Drain any remaining messages in the queue
+            while not queue.empty():
+                msg = queue.get_nowait()
+                line = msg.get("line", "") if isinstance(msg, dict) else str(msg)
+                if not line and isinstance(msg, dict):
+                    line = msg.get("detail", _json.dumps(msg))
+                yield f"data: {_json.dumps({'type': 'terminal_line', 'line': line})}\n\n"
+
+            # Get the tool result
+            tool_result = tool_task.result()
+
+            # Send result summary
+            yield f"data: {_json.dumps({'type': 'result', 'data': _build_result_summary(tool, tool_result)})}\n\n"
+
+            # Stream LLM risk analysis
+            result_text = _json.dumps(_build_result_summary(tool, tool_result), default=str)
+            copilot = GovernedCopilot(db)
+
+            analysis_content = ""
+            async for event in copilot.analyze_tool_result(tool, args, result_text):
+                if event.get("type") == "token":
+                    analysis_content += event["content"]
+                    yield f"data: {_json.dumps(event)}\n\n"
+
+            # Extract suggestions
+            suggestions = copilot._extract_scan_suggestions(tool, args, result_text + "\n" + analysis_content)
+
+            yield f"data: {_json.dumps({'type': 'done', 'suggestions': suggestions})}\n\n"
+
+        except Exception as e:
+            logger.error("Streaming tool execution failed", tool=tool, error=str(e), exc_info=True)
+            yield f"data: {_json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        finally:
+            ws_manager.unsubscribe(job_id, queue)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+async def _run_streaming_tool(tool: str, args: dict, job_id: str, db: AsyncSession) -> dict:
+    """Run a streaming tool and return its result."""
+    if tool == "run_nmap_scan":
+        from app.services.nmap_service import NmapService
+        service = NmapService(db)
+        return await service.execute_custom_scan(
+            target=args["target"],
+            nmap_args=args.get("nmap_args", "-sV -sC"),
+            run_id=job_id,
+        )
+    elif tool == "run_pentest_action":
+        from app.services.pentest_service import PentestService
+        from app.api.ws import manager as ws_manager
+        service = PentestService(db)
+
+        async def broadcast_callback(msg: str):
+            await ws_manager.broadcast(job_id, {"type": "pentest_output", "line": msg})
+
+        return await service.execute_action(
+            action_id=args["action_id"],
+            target=args["target"],
+            run_id=job_id,
+            params=args.get("params"),
+            broadcast=broadcast_callback,
+        )
+    else:
+        return {"status": "error", "error": f"Unknown streaming tool: {tool}"}
+
+
+def _build_result_summary(tool: str, result: dict) -> dict:
+    """Build a concise result summary for the frontend."""
+    if result.get("status") == "error":
+        return {"status": "error", "error": result.get("error", "Unknown error")}
+
+    summary = {"status": result.get("status", "completed")}
+
+    if tool == "run_nmap_scan":
+        summary["target"] = result.get("target", "")
+        summary["command_line"] = result.get("command_line", "")
+        summary["findings_created"] = result.get("findings_created", 0)
+        summary["total_findings"] = result.get("total_findings", 0)
+        hosts = result.get("scan_result", {}).get("hosts", {})
+        summary["hosts_discovered"] = len(hosts)
+        summary["import_result"] = result.get("import_result", {})
+    elif tool == "run_pentest_action":
+        summary["action"] = result.get("action", "")
+        summary["target"] = result.get("target", "")
+        summary["findings_created"] = result.get("findings_created", 0)
+        summary["total_findings"] = result.get("total_findings", 0)
+
+    return summary
 
 
 class TriageRequest(BaseModel):

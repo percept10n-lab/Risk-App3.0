@@ -1,5 +1,6 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict, Set
+import asyncio
 import json
 import structlog
 
@@ -10,6 +11,7 @@ logger = structlog.get_logger()
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, Set[WebSocket]] = {}
+        self._subscribers: dict[str, list[asyncio.Queue]] = {}
 
     async def connect(self, websocket: WebSocket, run_id: str):
         await websocket.accept()
@@ -24,6 +26,21 @@ class ConnectionManager:
             if not self.active_connections[run_id]:
                 del self.active_connections[run_id]
 
+    def subscribe(self, channel_id: str) -> asyncio.Queue:
+        """Subscribe to broadcasts for a channel. Returns a Queue that receives messages."""
+        q: asyncio.Queue = asyncio.Queue()
+        self._subscribers.setdefault(channel_id, []).append(q)
+        return q
+
+    def unsubscribe(self, channel_id: str, q: asyncio.Queue):
+        """Remove a queue subscription from a channel."""
+        if channel_id in self._subscribers:
+            self._subscribers[channel_id] = [
+                x for x in self._subscribers[channel_id] if x is not q
+            ]
+            if not self._subscribers[channel_id]:
+                del self._subscribers[channel_id]
+
     async def broadcast(self, run_id: str, message: dict):
         if run_id in self.active_connections:
             disconnected = []
@@ -35,6 +52,10 @@ class ConnectionManager:
                     disconnected.append(connection)
             for conn in disconnected:
                 self.active_connections[run_id].discard(conn)
+
+        # Also push to internal queue subscribers (used by SSE endpoints)
+        for q in self._subscribers.get(run_id, []):
+            await q.put(message)
 
 
 manager = ConnectionManager()

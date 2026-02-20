@@ -127,6 +127,14 @@ export const copilotApi = {
     api.post('/copilot/chat', { message, conversation, context }),
   executeTool: (data: { tool: string; args: Record<string, any> }) =>
     api.post('/copilot/execute-tool', data),
+  executeToolStream: (data: { tool: string; args: Record<string, any> }) => {
+    const apiBase = import.meta.env.VITE_API_URL || ''
+    return fetch(`${apiBase}/api/copilot/execute-tool/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+  },
   insights: () => api.get('/copilot/insights'),
   status: () => api.get('/copilot/status'),
 }
