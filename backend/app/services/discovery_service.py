@@ -689,10 +689,13 @@ class FingerprintService:
                 if fp_result.get("exposure"):
                     asset.exposure = fp_result["exposure"]
 
-                # Determine asset type from services
-                asset_type = self._guess_asset_type(fp_result)
+                # Determine asset type from services + vendor
+                asset_type = self._guess_asset_type(fp_result, vendor=asset.vendor, hostname=asset.hostname)
                 if asset_type != "unknown":
                     asset.asset_type = asset_type
+                    # Auto-assign zone and criticality based on detected type
+                    asset.zone = self._assign_zone(asset_type)
+                    asset.criticality = self._assign_criticality(asset_type)
 
                 asset.last_seen = datetime.utcnow()
                 fingerprinted += 1
@@ -847,10 +850,71 @@ class FingerprintService:
 
         return {"os_guess": "unknown", "os_accuracy": 0, "method": "heuristic"}
 
-    def _guess_asset_type(self, fp_result: dict) -> str:
-        """Guess asset type from fingerprint results."""
+    # Vendor strings -> asset_type mapping (checked case-insensitively)
+    _VENDOR_TYPE_MAP = {
+        "meross": "iot",
+        "tuya": "iot",
+        "hikvision": "iot",
+        "dahua": "iot",
+        "philips": "iot",
+        "signify": "iot",         # Philips Hue parent company
+        "samsung electronics": "iot",
+        "shelly": "iot",
+        "sonoff": "iot",
+        "tapo": "iot",
+        "tp-link tapo": "iot",
+        "ring": "iot",
+        "wyze": "iot",
+        "xiaomi": "iot",
+        "espressif": "iot",       # ESP32/ESP8266 devices
+        "avm": "router",          # Fritz!Box
+        "fritzbox": "router",
+        "fritz!box": "router",
+        "netgear": "router",
+        "asus networking": "router",
+        "ubiquiti": "router",
+        "mikrotik": "router",
+        "tp-link": "router",      # generic TP-Link = router (tapo handled above)
+    }
+
+    # asset_type -> default zone
+    _TYPE_ZONE_MAP = {
+        "router": "lan",
+        "workstation": "lan",
+        "server": "lan",
+        "nas": "lan",
+        "sbc": "lan",
+        "iot": "iot",
+        "printer": "lan",
+    }
+
+    # asset_type -> default criticality
+    _TYPE_CRITICALITY_MAP = {
+        "router": "critical",
+        "server": "high",
+        "nas": "high",
+        "workstation": "high",
+        "sbc": "medium",
+        "printer": "low",
+        "iot": "low",
+    }
+
+    def _guess_asset_type(self, fp_result: dict, vendor: str | None = None, hostname: str | None = None) -> str:
+        """Guess asset type from fingerprint results, vendor, and hostname."""
         os_guess = fp_result.get("os", {}).get("os_guess", "").lower()
         ports = {p["port"] for p in fp_result.get("open_ports", [])}
+
+        # Check vendor first (more reliable than OS/port heuristics)
+        if vendor:
+            vendor_lower = vendor.lower()
+            for vendor_key, asset_type in self._VENDOR_TYPE_MAP.items():
+                if vendor_key in vendor_lower:
+                    return asset_type
+
+        # Hostname-based hints (e.g. "fritz.box")
+        hostname = (hostname or "").lower()
+        if "fritz" in hostname:
+            return "router"
 
         if "synology" in os_guess:
             return "nas"
@@ -872,3 +936,11 @@ class FingerprintService:
             return "workstation"
 
         return "unknown"
+
+    def _assign_zone(self, asset_type: str) -> str:
+        """Assign network zone based on asset type."""
+        return self._TYPE_ZONE_MAP.get(asset_type, "lan")
+
+    def _assign_criticality(self, asset_type: str) -> str:
+        """Assign criticality based on asset type."""
+        return self._TYPE_CRITICALITY_MAP.get(asset_type, "medium")

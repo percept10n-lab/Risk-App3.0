@@ -8,6 +8,7 @@ logger = structlog.get_logger()
 
 WEAK_CIPHERS = {"RC4", "DES", "3DES", "NULL", "EXPORT", "anon", "MD5"}
 WEAK_PROTOCOLS = {"SSLv2", "SSLv3", "TLSv1", "TLSv1.0", "TLSv1.1"}
+STRONG_PROTOCOLS = {"TLSv1.2", "TLSv1.3"}
 
 
 class TLSChecker:
@@ -17,19 +18,27 @@ class TLSChecker:
 
         try:
             cert_info, protocol, cipher, raw = await self._get_tls_info(target, port)
+        except (ConnectionRefusedError, OSError, asyncio.TimeoutError) as e:
+            # Port not open or host unreachable — not a vulnerability
+            logger.info("TLS port not reachable", target=target, port=port, error=str(e))
+            return []
         except Exception as e:
             logger.warning("TLS check failed", target=target, port=port, error=str(e))
-            return [{
-                "title": f"TLS connection failed on port {port}",
-                "severity": "high",
-                "category": "vuln",
-                "description": f"Could not establish TLS connection: {str(e)}",
-                "evidence": str(e),
-                "cwe_id": "CWE-319",
-            }]
+            err_str = str(e).lower()
+            # SSL handshake failures on open ports are noteworthy but not high severity
+            if "handshake" in err_str or "ssl" in err_str:
+                return [{
+                    "title": f"TLS handshake failed on port {port}",
+                    "severity": "medium",
+                    "category": "misconfig",
+                    "description": f"TLS service on port {port} refused the handshake: {str(e)}",
+                    "evidence": str(e),
+                    "cwe_id": "CWE-319",
+                }]
+            return []
 
-        # Check protocol version
-        if protocol and any(weak in protocol for weak in WEAK_PROTOCOLS):
+        # Check protocol version (exact match to avoid "TLSv1" matching "TLSv1.3")
+        if protocol and protocol in WEAK_PROTOCOLS:
             findings.append({
                 "title": f"Weak TLS protocol version: {protocol}",
                 "severity": "high",
@@ -39,12 +48,20 @@ class TLSChecker:
                 "cwe_id": "CWE-326",
                 "evidence": f"Negotiated protocol: {protocol}",
             })
-        elif protocol:
+        elif protocol and protocol in STRONG_PROTOCOLS:
             findings.append({
                 "title": f"TLS protocol version: {protocol}",
                 "severity": "info",
                 "category": "info",
                 "description": f"Server uses {protocol}.",
+                "evidence": f"Negotiated protocol: {protocol}",
+            })
+        elif protocol:
+            findings.append({
+                "title": f"Unknown TLS protocol version: {protocol}",
+                "severity": "medium",
+                "category": "misconfig",
+                "description": f"Server negotiated {protocol} which is not a recognized strong protocol.",
                 "evidence": f"Negotiated protocol: {protocol}",
             })
 

@@ -98,10 +98,19 @@ class VulnScanService:
                 else:
                     total_duplicate += 1
 
+        # Phase 4: Mark stale findings (open findings not seen in this run) as fixed
+        stale_count = 0
+        if run_id and assets:
+            scanned_asset_ids = [a.id for a in assets]
+            stale_count = await self.finding_service.mark_stale_findings(run_id, scanned_asset_ids)
+            if stale_count:
+                logger.info("Auto-resolved stale findings", count=stale_count, run_id=run_id)
+
         # Store artifact
         summary = {
             "findings_created": total_created,
             "findings_duplicate": total_duplicate,
+            "findings_auto_resolved": stale_count,
             "errors": total_errors,
             "total_assets": len(assets),
         }
@@ -130,6 +139,7 @@ class VulnScanService:
             "status": "completed",
             "findings_created": total_created,
             "findings_duplicate": total_duplicate,
+            "findings_auto_resolved": stale_count,
             "errors": total_errors,
             "total_assets": len(assets),
         }
