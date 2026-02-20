@@ -182,12 +182,15 @@ export default function RisksPage() {
     setTreatmentSaving(false)
   }
 
-  // --- Summary cards ---
-  const riskCounts = useMemo(() => {
-    const counts = { critical: 0, high: 0, medium: 0, low: 0 }
-    risks.forEach((r) => { if (r.risk_level in counts) counts[r.risk_level as keyof typeof counts]++ })
-    return counts
+  // --- Summary cards (server-side stats for accuracy) ---
+  const [riskStats, setRiskStats] = useState<Record<string, number>>({ critical: 0, high: 0, medium: 0, low: 0 })
+  useEffect(() => {
+    risksApi.stats().then((res) => {
+      const byLevel = res.data.by_level || {}
+      setRiskStats({ critical: byLevel.critical || 0, high: byLevel.high || 0, medium: byLevel.medium || 0, low: byLevel.low || 0 })
+    }).catch(() => {})
   }, [risks])
+  const riskCounts = riskStats
 
   // --- Treatment buckets ---
   const untreated = useMemo(() => risks.filter((r) => ['identified', 'analyzed', 'evaluated'].includes(r.status)), [risks])

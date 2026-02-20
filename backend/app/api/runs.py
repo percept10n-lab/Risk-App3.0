@@ -227,6 +227,19 @@ async def _execute_pipeline(run_id: str, scope: dict):
             completed_steps.append("baseline")
             await _broadcast(run_id, "step_complete", "Baseline snapshot saved", step="baseline")
 
+            # Pipeline-wide stale finding cleanup: mark ALL open findings
+            # not observed in this run as fixed (covers all source_tools)
+            try:
+                from app.services.finding_service import FindingService
+                finding_svc = FindingService(db)
+                all_asset_ids = [a.id for a in assets] if assets else []
+                pipeline_stale = await finding_svc.mark_stale_findings(run_id, all_asset_ids)
+                if pipeline_stale:
+                    logger.info("Pipeline stale cleanup", auto_resolved=pipeline_stale, run_id=run_id)
+                await db.commit()
+            except Exception as e:
+                logger.warning("Pipeline stale cleanup failed", error=str(e))
+
             # Complete
             result = await db.execute(select(Run).where(Run.id == run_id))
             run = result.scalar_one_or_none()
