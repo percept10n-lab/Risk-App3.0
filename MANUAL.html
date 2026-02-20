@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 20mm 18mm 20mm 18mm; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11pt; line-height: 1.55; color: #1a1a1a; max-width: 100%; }
+  h1 { font-size: 24pt; color: #0f172a; border-bottom: 3px solid #3b82f6; padding-bottom: 8px; margin-top: 32px; page-break-after: avoid; }
+  h2 { font-size: 17pt; color: #1e3a5f; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 5px; margin-top: 28px; page-break-after: avoid; }
+  h3 { font-size: 13pt; color: #334155; margin-top: 20px; page-break-after: avoid; }
+  h4 { font-size: 11pt; color: #475569; margin-top: 16px; }
+  p { margin: 6px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 10pt; }
+  th { background: #f1f5f9; color: #334155; font-weight: 600; text-align: left; padding: 8px 10px; border: 1px solid #cbd5e1; }
+  td { padding: 6px 10px; border: 1px solid #e2e8f0; vertical-align: top; }
+  tr:nth-child(even) { background: #f8fafc; }
+  code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 10pt; font-family: Consolas, monospace; }
+  pre { background: #1e293b; color: #e2e8f0; padding: 14px; border-radius: 6px; font-size: 9.5pt; overflow-x: auto; line-height: 1.45; page-break-inside: avoid; }
+  pre code { background: none; color: inherit; padding: 0; }
+  ul, ol { padding-left: 22px; margin: 6px 0; }
+  li { margin: 3px 0; }
+  strong { color: #0f172a; }
+  hr { border: none; border-top: 1px solid #e2e8f0; margin: 24px 0; }
+  a { color: #3b82f6; text-decoration: none; }
+  .cover { text-align: center; padding: 120px 0 60px 0; page-break-after: always; }
+  .cover h1 { font-size: 36pt; border: none; color: #0f172a; }
+  .cover p { font-size: 14pt; color: #64748b; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>Risk Platform</h1>
+  <p>User Manual</p>
+  <p style="font-size:11pt; margin-top: 40px; color: #94a3b8;">Home Network Security Assessment &amp; Risk Management</p>
+  <p style="font-size:10pt; margin-top: 80px; color: #94a3b8;">February 2026</p>
+</div>
+<h1 id="risk-platform-user-manual">Risk Platform — User Manual</h1>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#1-requirements--installation">Requirements &amp; Installation</a></li>
+<li><a href="#2-first-launch">First Launch</a></li>
+<li><a href="#3-dashboard">Dashboard — Security Posture at a Glance</a></li>
+<li><a href="#4-workflow">Workflow — Running a Full Assessment</a></li>
+<li><a href="#5-nmap-scanner">Nmap Scanner — Custom Scans</a></li>
+<li><a href="#6-assets">Assets — Inventory Management</a></li>
+<li><a href="#7-findings">Findings — Vulnerability List</a></li>
+<li><a href="#8-vulnerability-management">Vulnerability Management — Triage Board</a></li>
+<li><a href="#9-pentest-module">Pentest Module — Targeted Testing</a></li>
+<li><a href="#10-threats">Threats — STRIDE Modeling</a></li>
+<li><a href="#11-threat-intelligence">Threat Intelligence — Daily Brief</a></li>
+<li><a href="#12-risks">Risks — ISO 27005 Register</a></li>
+<li><a href="#13-mitre-attck">MITRE ATT&amp;CK — Technique Mapping</a></li>
+<li><a href="#14-drift-monitor">Drift Monitor — Change Detection</a></li>
+<li><a href="#15-ai-copilot">AI Copilot — Guided Remediation</a></li>
+<li><a href="#16-reports">Reports — Export &amp; Documentation</a></li>
+<li><a href="#17-settings">Settings — Configuration</a></li>
+<li><a href="#18-recommended-workflow">Recommended Workflow</a></li>
+</ol>
+<hr />
+<h2 id="1-requirements-installation">1. Requirements &amp; Installation</h2>
+<h3 id="system-requirements">System Requirements</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Requirement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OS</td>
+<td>Windows 10/11, Linux, or macOS</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>3.12+</td>
+</tr>
+<tr>
+<td>Node.js</td>
+<td>20+</td>
+</tr>
+<tr>
+<td>Docker</td>
+<td>Docker Desktop (for frontend)</td>
+</tr>
+<tr>
+<td>Nmap</td>
+<td>Installed and on PATH</td>
+</tr>
+<tr>
+<td>RAM</td>
+<td>4 GB minimum</td>
+</tr>
+<tr>
+<td>Disk</td>
+<td>1 GB free</td>
+</tr>
+</tbody>
+</table>
+<h3 id="optional">Optional</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ollama</td>
+<td>Local AI for Copilot and Threat Intel briefs (recommended: <code>llama3.2</code>)</td>
+</tr>
+<tr>
+<td>OpenAI-compatible API</td>
+<td>Alternative AI provider</td>
+</tr>
+</tbody>
+</table>
+<h3 id="installation">Installation</h3>
+<p><strong>1. Clone the repository:</strong></p>
+<pre><code class="language-bash">git clone &lt;repo-url&gt; D:\Risk-App3.0
+cd D:\Risk-App3.0
+</code></pre>
+<p><strong>2. Configure environment:</strong></p>
+<pre><code class="language-bash">cp .env.example .env
+</code></pre>
+<p>Edit <code>.env</code> — all variables use the <code>RISK_</code> prefix:</p>
+<pre><code class="language-env"># Core
+RISK_DEBUG=true
+RISK_DATABASE_URL=sqlite+aiosqlite:///data/risk_platform.db
+RISK_DATA_DIR=data
+RISK_CONFIG_DIR=config
+RISK_ARTIFACTS_DIR=data/artifacts
+
+# CORS (match your frontend URL)
+RISK_CORS_ORIGINS=[&quot;http://localhost:3000&quot;,&quot;http://localhost:5173&quot;]
+
+# AI (optional — leave blank to disable AI features)
+RISK_AI_PROVIDER=ollama
+RISK_AI_BASE_URL=http://localhost:11434
+RISK_AI_MODEL=llama3.2
+RISK_AI_API_KEY=
+
+# Scanner
+RISK_DEFAULT_SCAN_RATE=100
+RISK_SCAN_TIMEOUT=300
+</code></pre>
+<p><strong>3. Start the backend:</strong></p>
+<pre><code class="language-bash">cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+</code></pre>
+<p>The database (<code>data/risk_platform.db</code>) is created automatically on first start.</p>
+<p><strong>4. Start the frontend (Docker):</strong></p>
+<pre><code class="language-bash">cd ..
+docker-compose up -d --build
+</code></pre>
+<p>This builds the React app and serves it via nginx on port 3000.</p>
+<p><strong>5. Open the browser:</strong></p>
+<p>Navigate to <code>http://localhost:3000</code>. You should see the Dashboard.</p>
+<p><strong>6. (Optional) Start Ollama for AI features:</strong></p>
+<pre><code class="language-bash">ollama serve
+ollama pull llama3.2
+</code></pre>
+<p>Verify AI connectivity in <strong>Settings &gt; AI Configuration &gt; Test Connection</strong>.</p>
+<hr />
+<h2 id="2-first-launch">2. First Launch</h2>
+<p>On first launch the database is empty. The recommended first step:</p>
+<ol>
+<li>Go to <strong>Workflow</strong> (<code>/workflow</code>)</li>
+<li>Enter your home subnet (e.g. <code>192.168.178.0/24</code>)</li>
+<li>Click <strong>Start Pipeline</strong></li>
+<li>Wait for all 8 steps to complete</li>
+</ol>
+<p>This single action populates the entire platform: assets, findings, threats, risks, MITRE mappings, and a drift baseline.</p>
+<hr />
+<h2 id="3-dashboard">3. Dashboard</h2>
+<p><strong>Route:</strong> <code>/dashboard</code></p>
+<p>The dashboard shows your security posture at a glance:</p>
+<ul>
+<li><strong>4 stat cards:</strong> Total Assets, Findings, Risks, Threats</li>
+<li><strong>Findings by Severity:</strong> Click any severity badge to see all findings of that level</li>
+<li><strong>Risk Distribution:</strong> Breakdown by risk level (critical/high/medium/low)</li>
+<li><strong>Quick Actions:</strong></li>
+<li><em>Start Scan</em> — jump to the Workflow page</li>
+<li><em>AI Triage</em> — jump to the AI Copilot</li>
+<li><em>Generate Report</em> — jump to Reports</li>
+<li><strong>Recent Findings:</strong> The 5 latest discoveries</li>
+</ul>
+<hr />
+<h2 id="4-workflow-running-a-full-assessment">4. Workflow — Running a Full Assessment</h2>
+<p><strong>Route:</strong> <code>/workflow</code></p>
+<p>The Workflow page runs the complete 8-step security assessment pipeline.</p>
+<h3 id="how-to-use">How to use</h3>
+<ol>
+<li>Enter a subnet in CIDR notation (e.g. <code>192.168.178.0/24</code>)</li>
+<li>Click <strong>Start Pipeline</strong></li>
+<li>Watch the 8 steps execute in real-time:</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. Asset Discovery</td>
+<td>Enumerates hosts on the network via ARP/nmap</td>
+</tr>
+<tr>
+<td>2. Fingerprinting</td>
+<td>Identifies services, OS, and versions on each host</td>
+</tr>
+<tr>
+<td>3. Threat Modeling</td>
+<td>Generates STRIDE threats per zone and trust boundary</td>
+</tr>
+<tr>
+<td>4. Vulnerability Scanning</td>
+<td>Runs HTTP, TLS, SSH, DNS, credential checks on each asset</td>
+</tr>
+<tr>
+<td>5. Exploit Analysis</td>
+<td>Assesses which findings are actively exploitable</td>
+</tr>
+<tr>
+<td>6. MITRE Mapping</td>
+<td>Links findings and threats to ATT&amp;CK techniques</td>
+</tr>
+<tr>
+<td>7. Risk Analysis</td>
+<td>Calculates risk level using ISO 27005 matrix (likelihood x impact)</td>
+</tr>
+<tr>
+<td>8. Baseline Snapshot</td>
+<td>Creates a drift detection baseline from the current state</td>
+</tr>
+</tbody>
+</table>
+<h3 id="live-console">Live Console</h3>
+<p>A terminal at the bottom displays real-time progress messages via WebSocket. Each step broadcasts status updates as it runs.</p>
+<h3 id="controls">Controls</h3>
+<ul>
+<li><strong>Pause</strong> — Suspend the pipeline (can resume later)</li>
+<li><strong>Resume</strong> — Continue a paused pipeline</li>
+<li><strong>Cancel</strong> — Abort the pipeline</li>
+</ul>
+<h3 id="results">Results</h3>
+<p>When complete, a summary card shows:
+- Hosts discovered
+- Assets created/updated
+- Findings created
+- Threats created
+- Risks created</p>
+<p>The <strong>Recent Runs</strong> sidebar lists the last 5 runs for quick reference.</p>
+<hr />
+<h2 id="5-nmap-scanner">5. Nmap Scanner</h2>
+<p><strong>Route:</strong> <code>/nmap</code></p>
+<p>A custom nmap scanner with security guardrails for ad-hoc scans.</p>
+<h3 id="how-to-use_1">How to use</h3>
+<ol>
+<li>Enter a target IP or CIDR range</li>
+<li>(Optional) Add nmap arguments (e.g. <code>-sV -sC -p 1-1000</code>)</li>
+<li>Set a timeout in seconds</li>
+<li>Toggle <strong>Auto-Pipeline</strong> to run the full 8-step pipeline after the scan</li>
+<li>Click <strong>Scan</strong></li>
+</ol>
+<h3 id="safety-guardrails">Safety Guardrails</h3>
+<p>The scanner blocks dangerous arguments:
+- No file output flags (<code>-oN</code>, <code>-oG</code>, <code>-oS</code>, <code>-oA</code>)
+- No input from files (<code>-iL</code>)
+- No shell redirects (<code>&gt;</code>, <code>|</code>)
+- No command substitution (backticks, <code>$()</code>)
+- <strong>Scope restricted to RFC 1918 private networks</strong> (192.168.x.x, 10.x.x.x, 172.16-31.x.x)</p>
+<h3 id="live-output">Live Output</h3>
+<p>The NmapConsole shows real-time nmap output as it runs. If Auto-Pipeline is enabled, the pipeline steps are displayed after the scan completes.</p>
+<hr />
+<h2 id="6-assets">6. Assets</h2>
+<p><strong>Route:</strong> <code>/assets</code></p>
+<h3 id="asset-list">Asset List</h3>
+<p>A paginated table of all discovered network assets showing:
+- IP address and hostname
+- Asset type (workstation, NAS, camera, smart plug, router, etc.)
+- Zone (LAN, IoT, Guest, DMZ)
+- Criticality (low, medium, high, critical)
+- Last scanned timestamp</p>
+<h3 id="asset-detail-assetsid">Asset Detail (<code>/assets/:id</code>)</h3>
+<p>Click any asset to see:
+- Full network information (IP, MAC, DNS)
+- Service ports and exposure profile (HTTP, SSH, SMB, RDP, etc.)
+- Associated findings and their severity
+- Related risks and threats
+- OS guess and vendor info</p>
+<hr />
+<h2 id="7-findings">7. Findings</h2>
+<p><strong>Route:</strong> <code>/findings</code></p>
+<h3 id="finding-list">Finding List</h3>
+<p>All vulnerability and misconfiguration findings with filters:</p>
+<p><strong>Filters:</strong>
+- Severity: critical, high, medium, low, info
+- Status: open, in_progress, fixed, accepted
+- Category: vuln, misconfig, exposure, info</p>
+<p><strong>Columns:</strong> Severity, Title, Description, Asset, Category, Source Tool, MITRE Techniques, Status, Date Found</p>
+<h3 id="run-vulnerability-scan">Run Vulnerability Scan</h3>
+<p>Click <strong>Run Vuln Scan</strong> to trigger an on-demand scan:
+1. (Optional) Select a specific target asset, or leave blank to scan all
+2. Click <strong>Start Scan</strong>
+3. Results modal shows: findings created, duplicates skipped, errors</p>
+<p>The scan runs these checks per asset:
+- HTTP security headers (CSP, HSTS, X-Frame-Options, etc.)
+- TLS/SSL (certificate validity, weak ciphers, protocol versions)
+- SSH (banner, weak auth methods, outdated versions)
+- DNS (zone transfer, DNSSEC)
+- Default credentials (admin/admin, SNMP community strings, etc.)</p>
+<h3 id="finding-detail-findingsid">Finding Detail (<code>/findings/:id</code>)</h3>
+<p>Click any finding to see:
+- Full description and evidence
+- Affected asset with context
+- Remediation guidance
+- CWE reference
+- MITRE technique mappings
+- Related risks</p>
+<hr />
+<h2 id="8-vulnerability-management">8. Vulnerability Management</h2>
+<p><strong>Route:</strong> <code>/vulnmgmt</code></p>
+<p>A triage-focused view for managing findings through their lifecycle.</p>
+<h3 id="metrics-section">Metrics Section</h3>
+<p>Top-level cards showing totals by:
+- Severity (critical, high, medium, low, info)
+- Status (open, in_progress, fixed, accepted)
+- Category (vuln, misconfig, exposure, info)</p>
+<h3 id="finding-management">Finding Management</h3>
+<p>Expandable rows with:
+- Status dropdown to change status (open &gt; in_progress &gt; fixed/accepted)
+- Asset context (hostname, IP)
+- Evidence view
+- CWE reference
+- MITRE mappings
+- Related risks</p>
+<hr />
+<h2 id="9-pentest-module">9. Pentest Module</h2>
+<p><strong>Route:</strong> <code>/pentest</code></p>
+<p>Guardrailed penetration testing actions with live terminal output.</p>
+<h3 id="how-to-use_2">How to use</h3>
+<ol>
+<li><strong>Select a target:</strong></li>
+<li>Use the dropdown to pick an asset from inventory</li>
+<li>Or type an IP/hostname manually</li>
+<li><strong>Choose an action card</strong> and click <strong>Execute</strong></li>
+<li>Watch the <strong>live console</strong> as probes run in real-time</li>
+<li>Review the <strong>results modal</strong> when complete</li>
+</ol>
+<h3 id="available-actions-10">Available Actions (10)</h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Risk</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Port Verification</td>
+<td>low</td>
+<td>Scan for open ports and verify service availability</td>
+</tr>
+<tr>
+<td>HTTP Security Headers</td>
+<td>low</td>
+<td>Check for HSTS, CSP, X-Frame-Options best practices</td>
+</tr>
+<tr>
+<td>TLS Configuration Check</td>
+<td>low</td>
+<td>Verify certificate, protocol versions, cipher strength</td>
+</tr>
+<tr>
+<td>SSH Hardening Check</td>
+<td>low</td>
+<td>Audit SSH for weak algorithms and auth settings</td>
+</tr>
+<tr>
+<td>UPnP Discovery Check</td>
+<td>low</td>
+<td>Detect UPnP services exposed to the network</td>
+</tr>
+<tr>
+<td>Admin Interface Exposure</td>
+<td>medium</td>
+<td>Probe for web panels and management ports</td>
+</tr>
+<tr>
+<td>WAF Detection</td>
+<td>low</td>
+<td>Detect WAFs using probes, signatures, behavioral analysis</td>
+</tr>
+<tr>
+<td>Web Vulnerability Probe</td>
+<td>medium</td>
+<td>Test CORS, clickjacking, XSS, SQLi, open redirect, debug disclosure</td>
+</tr>
+<tr>
+<td>Service Fingerprint</td>
+<td>low</td>
+<td>Detect CMS, frameworks, web servers, languages</td>
+</tr>
+<tr>
+<td>Exploit Chain Analyzer</td>
+<td>low</td>
+<td>Analyze existing findings for multi-step attack chains</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tabs">Tabs</h3>
+<ul>
+<li><strong>Actions</strong> — The action grid with execute buttons</li>
+<li><strong>Results</strong> — Session findings accumulated from all executions</li>
+<li><strong>History</strong> — Execution log with timestamps and targets</li>
+</ul>
+<h3 id="live-console_1">Live Console</h3>
+<p>The terminal at the bottom shows timestamped progress messages as each action runs — which probes are sent, what's being checked, findings as they're discovered.</p>
+<hr />
+<h2 id="10-threats">10. Threats</h2>
+<p><strong>Route:</strong> <code>/threats</code></p>
+<p>STRIDE-based threat modeling for your network.</p>
+<h3 id="tabs_1">Tabs</h3>
+<p><strong>Threats Tab:</strong>
+- List of all identified threats
+- Each shows: title, STRIDE type, zone, source (rule/manual/ai_suggested)
+- Color-coded STRIDE badges: S (Spoofing), T (Tampering), R (Repudiation), ID (Info Disclosure), DoS, EoP (Elevation of Privilege)
+- Add or delete threats manually</p>
+<p><strong>Generate Tab:</strong>
+- Click <strong>Generate</strong> to auto-create threats from your discovered assets
+- The system applies STRIDE rules per zone:
+  - IoT zone: higher tampering/DoS risk
+  - Guest zone: higher spoofing/info disclosure risk
+  - LAN zone: privilege escalation focus
+  - DMZ zone: all threat types</p>
+<p><strong>Trust Boundaries Tab:</strong>
+- Visual diagram of zone boundaries
+- Trust levels per zone (LAN: high, IoT: low, Guest: very low, DMZ: medium)
+- Boundary controls (firewall, NAT, VLAN isolation, client isolation)</p>
+<hr />
+<h2 id="11-threat-intelligence">11. Threat Intelligence</h2>
+<p><strong>Route:</strong> <code>/intel</code></p>
+<p>Security intelligence dashboard with AI-generated daily briefs.</p>
+<h3 id="period-selector">Period Selector</h3>
+<p>Toggle between 1 day, 7 days, or 30 days.</p>
+<h3 id="stat-cards">Stat Cards</h3>
+<ul>
+<li>Total Threats (all-time)</li>
+<li>New Threats (in selected period)</li>
+<li>Open Critical/High findings</li>
+<li>Critical Risks</li>
+</ul>
+<h3 id="daily-threat-brief">Daily Threat Brief</h3>
+<p>An AI-generated analysis (requires Ollama or OpenAI) summarizing:
+- Current threat landscape for your network
+- Priority areas of concern
+- Recommended actions</p>
+<p>Click <strong>Refresh</strong> to regenerate.</p>
+<h3 id="analytics">Analytics</h3>
+<ul>
+<li><strong>Findings by Severity</strong> — horizontal bar chart</li>
+<li><strong>Threat Categories (STRIDE)</strong> — breakdown by type</li>
+<li><strong>Top MITRE Techniques</strong> — most frequently mapped techniques</li>
+<li><strong>Asset Exposure</strong> — table of most-threatened assets</li>
+<li><strong>Recent Threats</strong> — latest discoveries with confidence scores</li>
+</ul>
+<hr />
+<h2 id="12-risks">12. Risks</h2>
+<p><strong>Route:</strong> <code>/risks</code></p>
+<p>ISO 27005-compliant risk management.</p>
+<h3 id="risk-register-tab">Risk Register Tab</h3>
+<p>Complete risk inventory with:
+- Scenario description
+- Likelihood and Impact scores
+- Risk Level (derived from 5x5 matrix)
+- Linked asset and finding
+- Status lifecycle: identified &gt; analyzed &gt; evaluated &gt; treated &gt; monitoring
+- SLA tracking (Critical: 7 days, High: 30 days, Medium: 90 days)</p>
+<h3 id="risk-matrix-tab">Risk Matrix Tab</h3>
+<p>Interactive 5x5 matrix visualization:</p>
+<pre><code>                    Impact
+              Negl.  Low   Med   High  Crit
+very_high     Med    High  High  Crit  Crit
+high          Med    Med   High  High  Crit
+Likelihood:
+medium        Low    Med   Med   High  High
+low           Low    Low   Med   Med   High
+very_low      Low    Low   Low   Med   Med
+</code></pre>
+<p>Click any cell to see all risks in that category.</p>
+<h3 id="risk-analysis-tab">Risk Analysis Tab</h3>
+<p>AI-driven risk analysis showing correlations between threats, findings, and risks.</p>
+<h3 id="treatment-tab">Treatment Tab</h3>
+<p>Apply treatment to risks:
+1. Select treatment option: <strong>Mitigate</strong>, <strong>Accept</strong>, <strong>Transfer</strong>, or <strong>Avoid</strong>
+2. Write a treatment plan narrative
+3. Select specific treatment measures (checklist)
+4. Assign an owner
+5. Set a due date
+6. Assess residual risk level</p>
+<p>Treatment progress is tracked and audited.</p>
+<hr />
+<h2 id="13-mitre-attck">13. MITRE ATT&amp;CK</h2>
+<p><strong>Route:</strong> <code>/mitre</code></p>
+<h3 id="technique-matrix">Technique Matrix</h3>
+<p>A 14-column layout matching the official ATT&amp;CK framework. Each column is a tactic:</p>
+<p>Reconnaissance, Resource Development, Initial Access, Execution, Persistence, Privilege Escalation, Defense Evasion, Credential Access, Discovery, Lateral Movement, Collection, Command &amp; Control, Exfiltration, Impact</p>
+<h3 id="technique-cards">Technique Cards</h3>
+<p>Each card shows:
+- Technique ID (e.g. T1133)
+- Technique name
+- Confidence percentage
+- Finding and asset counts
+- Red border if actively exploitable</p>
+<p>Click a card to see:
+- Linked findings with severity
+- Affected assets with IPs
+- Drill-down navigation to findings and assets</p>
+<h3 id="attck-navigator-export">ATT&amp;CK Navigator Export</h3>
+<p>Click <strong>Export</strong> to download a JSON file compatible with the official MITRE ATT&amp;CK Navigator. Red = exploitable, gray = mapped.</p>
+<hr />
+<h2 id="14-drift-monitor">14. Drift Monitor</h2>
+<p><strong>Route:</strong> <code>/drift</code></p>
+<p>Detect changes in your network since the last baseline.</p>
+<h3 id="status-indicator">Status Indicator</h3>
+<ul>
+<li><strong>STABLE</strong> (green) — No unexpected changes</li>
+<li><strong>DRIFTED</strong> (yellow) — Changes detected</li>
+<li><strong>ALERT</strong> (red) — Critical/high severity changes</li>
+</ul>
+<h3 id="summary-cards">Summary Cards</h3>
+<ul>
+<li>Baselines count</li>
+<li>Changes detected</li>
+<li>Alerts (critical/high)</li>
+<li>Zones monitored</li>
+</ul>
+<h3 id="changes-timeline">Changes Timeline</h3>
+<p>Grouped by date, showing:
+- <strong>New Asset</strong> (green +) — new host discovered
+- <strong>Removed Asset</strong> (red -) — host disappeared
+- <strong>New Ports</strong> (orange triangle) — new services detected
+- <strong>Closed Ports</strong> (blue arrows) — services shut down
+- <strong>Exposure Change</strong> (red triangle) — security exposure increased/decreased</p>
+<p>Expand any change to see raw detail data.</p>
+<h3 id="baseline-management">Baseline Management</h3>
+<p>Create new baselines:
+1. Select zone: LAN, IoT, Guest, DMZ
+2. Select type: full, ports_only, services_only
+3. Click <strong>Create Baseline</strong></p>
+<p>The baseline list shows each snapshot with zone, type, age, and asset count.</p>
+<h3 id="workflow">Workflow</h3>
+<ol>
+<li>Run a Workflow assessment (creates baseline automatically at step 8)</li>
+<li>Run another assessment later</li>
+<li>Visit Drift Monitor to see what changed</li>
+<li>Investigate alerts and changes</li>
+<li>If changes are expected, create a new baseline to accept the new state</li>
+</ol>
+<hr />
+<h2 id="15-ai-copilot">15. AI Copilot</h2>
+<p><strong>Route:</strong> <code>/copilot</code></p>
+<p>AI-guided investigation and remediation of findings. Requires an AI provider (Ollama or OpenAI).</p>
+<h3 id="6-step-workflow">6-Step Workflow</h3>
+<p><strong>Step 1 — INVESTIGATE:</strong>
+- Select a finding from the triage list (sorted by severity)
+- The copilot gathers context: asset info, MITRE mappings, related risks
+- Displays analysis: What the finding is, why it matters, business impact</p>
+<p><strong>Step 2 — PLAN:</strong>
+- AI generates a step-by-step remediation plan
+- Shows: actions, effort level, required resources, risk notes</p>
+<p><strong>Step 3 — CONFIRM:</strong>
+- Review the plan
+- Click <strong>Confirm &amp; Execute</strong> or go back to adjust</p>
+<p><strong>Step 4 — EXECUTE:</strong>
+- Finding status changes to <code>in_progress</code>
+- Action is logged in the audit trail
+- Apply the fix manually (or automated if applicable)</p>
+<p><strong>Step 5 — VERIFY:</strong>
+- The copilot runs a verification scan against the affected asset
+- Checks if the finding is still present
+- Verdict: <strong>LIKELY_FIXED</strong> or <strong>STILL_VULNERABLE</strong></p>
+<p><strong>Step 6 — REPORT:</strong>
+- If fixed: mark finding as <code>fixed</code>
+- If still vulnerable: iterate (go back to planning) or escalate
+- Complete audit trail preserved</p>
+<hr />
+<h2 id="16-reports">16. Reports</h2>
+<p><strong>Route:</strong> <code>/reports</code></p>
+<h3 id="executive-summary">Executive Summary</h3>
+<p>A posture card at the top showing:
+- Overall posture badge (CRITICAL / HIGH / MEDIUM / LOW / HEALTHY)
+- Metric cards: Assets, Findings, Risks, Threats
+- Severity and risk breakdown bar charts</p>
+<h3 id="report-types">Report Types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Format</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>HTML Report</strong></td>
+<td>.html</td>
+<td>Interactive web report with full evidence</td>
+</tr>
+<tr>
+<td><strong>PDF Report</strong></td>
+<td>.pdf</td>
+<td>Printable document for stakeholders</td>
+</tr>
+<tr>
+<td><strong>JSON Export</strong></td>
+<td>.json</td>
+<td>Machine-readable full data export</td>
+</tr>
+<tr>
+<td><strong>CSV Export</strong></td>
+<td>.csv</td>
+<td>Spreadsheet analysis (findings, risks, assets, MITRE)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="how-to-generate">How to generate</h3>
+<ol>
+<li>Click <strong>Generate</strong> on the desired report type</li>
+<li>Wait for generation (spinner)</li>
+<li>Click <strong>Download</strong> to save the file</li>
+<li>Click <strong>Preview</strong> (HTML only) to view in browser</li>
+</ol>
+<p>Reports include: executive summary, risk matrix, findings by severity, asset inventory, detailed findings with evidence, MITRE heatmap, risk scenarios, and recommendations.</p>
+<hr />
+<h2 id="17-settings">17. Settings</h2>
+<p><strong>Route:</strong> <code>/settings</code></p>
+<h3 id="scan-policy-tab">Scan Policy Tab</h3>
+<ul>
+<li><strong>Policy Name</strong> — identifier for this policy</li>
+<li><strong>Scope Allowlist</strong> — CIDR ranges to include in scans (e.g. <code>192.168.178.0/24</code>)</li>
+<li><strong>Scope Denylist</strong> — CIDR ranges to exclude</li>
+<li><strong>Action Allowlist</strong> — which scanning actions are permitted</li>
+<li><strong>Rate Limits:</strong></li>
+<li>Scan: requests/min (default 100)</li>
+<li>Check: requests/min (default 50)</li>
+<li>Pentest Action: requests/min (default 10)</li>
+<li><strong>Time Windows:</strong></li>
+<li>Allowed hours (default: 00:00–23:59)</li>
+<li>Maintenance windows</li>
+</ul>
+<h3 id="ai-configuration-tab">AI Configuration Tab</h3>
+<ul>
+<li><strong>Provider:</strong> Ollama (local) or OpenAI-compatible</li>
+<li><strong>Model:</strong> Model name (default: <code>llama3.2</code>)</li>
+<li><strong>Base URL:</strong> API endpoint (default: <code>http://localhost:11434</code>)</li>
+<li><strong>Enable AI:</strong> Toggle on/off</li>
+<li><strong>Test Connection:</strong> Verify connectivity</li>
+</ul>
+<h3 id="evaluation-thresholds-tab">Evaluation Thresholds Tab</h3>
+<ul>
+<li><strong>Risk Acceptance:</strong> Max acceptable risk level (Low/Medium/High/Critical)</li>
+<li><strong>Auto-Triage:</strong> Enable auto-triage on new findings, minimum priority score (0–100)</li>
+<li><strong>Baseline Auto-Creation:</strong> Auto-create baselines after scans, zone selection</li>
+</ul>
+<h3 id="schedules-tab">Schedules Tab</h3>
+<p>Create automated recurring scans:</p>
+<ol>
+<li>Enter a schedule name</li>
+<li>Select scan type: Full, Discovery Only, Vulnerability Scan Only, Threat Modeling Only</li>
+<li>Choose schedule type:</li>
+<li><strong>Interval:</strong> every 1h, 2h, 4h, 8h, 12h, 1d, 7d</li>
+<li><strong>Cron:</strong> custom cron expression or preset (Daily 2AM, Weekly Sunday 3AM, Monthly 1st 4AM)</li>
+<li>Set CIDR scope</li>
+<li>Toggle <strong>Enable Immediately</strong></li>
+<li>Click <strong>Create</strong></li>
+</ol>
+<p>Use <strong>Run Now</strong> to trigger any schedule immediately.</p>
+<hr />
+<h2 id="18-recommended-workflow">18. Recommended Workflow</h2>
+<h3 id="initial-setup-day-1">Initial Setup (Day 1)</h3>
+<ol>
+<li>Install prerequisites (Python, Node, Docker, Nmap, optionally Ollama)</li>
+<li>Configure <code>.env</code> with your network settings</li>
+<li>Start backend and frontend</li>
+<li>Go to <strong>Settings</strong> — configure your scan policy scope (your home subnet)</li>
+<li>Go to <strong>Workflow</strong> — run a full assessment on your subnet</li>
+<li>Wait for all 8 steps to complete</li>
+<li>Review <strong>Dashboard</strong> for your security posture</li>
+</ol>
+<h3 id="regular-use">Regular Use</h3>
+<ol>
+<li><strong>Dashboard</strong> — Check posture, review recent findings</li>
+<li><strong>Findings</strong> — Triage new findings, run vulnerability scans as needed</li>
+<li><strong>Risks</strong> — Review risk register, apply treatments to high/critical risks</li>
+<li><strong>AI Copilot</strong> — Investigate critical findings, follow guided remediation</li>
+<li><strong>Drift Monitor</strong> — Check for network changes since last baseline</li>
+<li><strong>Pentest</strong> — Run targeted tests against specific assets</li>
+<li><strong>Reports</strong> — Generate reports for documentation</li>
+</ol>
+<h3 id="scheduled-automation">Scheduled Automation</h3>
+<p>Set up recurring scans in <strong>Settings &gt; Schedules</strong>:
+- <strong>Daily at 2 AM:</strong> Full vulnerability scan
+- <strong>Weekly Sunday 3 AM:</strong> Full pipeline assessment
+- <strong>Monthly:</strong> Generate reports for compliance</p>
+<h3 id="after-network-changes">After Network Changes</h3>
+<p>When you add new devices or change your network:
+1. Run a new <strong>Workflow</strong> assessment
+2. Check <strong>Drift Monitor</strong> for detected changes
+3. Review new findings and risks
+4. Create a new baseline once changes are accepted</p>
+<hr />
+<h2 id="configuration-files-reference">Configuration Files Reference</h2>
+<p>Located in <code>D:\Risk-App3.0\config\</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>default_policy.yaml</code></td>
+<td>Scan scope, allowed actions, rate limits, time windows</td>
+</tr>
+<tr>
+<td><code>risk_matrix.yaml</code></td>
+<td>ISO 27005 5x5 risk matrix, treatment thresholds, SLA timers</td>
+</tr>
+<tr>
+<td><code>zone_model.yaml</code></td>
+<td>Network zones (LAN, IoT, Guest, DMZ), trust levels, boundary controls</td>
+</tr>
+<tr>
+<td><code>baselines.yaml</code></td>
+<td>Expected ports/services per device type, compliance checks</td>
+</tr>
+<tr>
+<td><code>mapping_rules.yaml</code></td>
+<td>MITRE ATT&amp;CK technique mapping rules with confidence scores</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="api-health-check">API Health Check</h2>
+<p>Verify the backend is running:</p>
+<pre><code>GET http://localhost:8000/api/health
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{&quot;status&quot;: &quot;healthy&quot;, &quot;version&quot;: &quot;1.0.0&quot;}
+</code></pre>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Frontend shows blank page</td>
+<td>Check Docker is running: <code>docker-compose ps</code></td>
+</tr>
+<tr>
+<td>Backend won't start</td>
+<td>Check Python 3.12+ and all requirements installed</td>
+</tr>
+<tr>
+<td>Nmap scan fails</td>
+<td>Verify nmap is installed and on PATH</td>
+</tr>
+<tr>
+<td>AI features disabled</td>
+<td>Install Ollama and pull a model, or configure OpenAI API key</td>
+</tr>
+<tr>
+<td>WebSocket not connecting</td>
+<td>Check nginx config has WebSocket upgrade headers</td>
+</tr>
+<tr>
+<td>Database locked</td>
+<td>Restart backend — WAL mode handles most concurrency</td>
+</tr>
+<tr>
+<td>Scan scope rejected</td>
+<td>Only RFC 1918 private ranges are allowed</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>
