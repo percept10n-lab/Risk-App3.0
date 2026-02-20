@@ -93,6 +93,12 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
   const [commentFor, setCommentFor] = useState<string | null>(null)
   const [comment, setComment] = useState('')
 
+  // Treatment fields
+  const [treatmentOwner, setTreatmentOwner] = useState('')
+  const [treatmentDueDate, setTreatmentDueDate] = useState('')
+  const [treatmentNote, setTreatmentNote] = useState('')
+  const [savingTreatment, setSavingTreatment] = useState(false)
+
   useEffect(() => {
     loadData()
   }, [])
@@ -206,6 +212,32 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
     setRiskCreating(false)
   }
 
+  async function saveTreatmentFields(findingId: string) {
+    setSavingTreatment(true)
+    try {
+      const payload: Record<string, any> = {}
+      if (treatmentOwner) payload.owner = treatmentOwner
+      if (treatmentDueDate) payload.due_date = treatmentDueDate
+      if (treatmentNote) payload.treatment_note = treatmentNote
+      if (Object.keys(payload).length > 0) {
+        await api.put(`/findings/${findingId}`, payload)
+        // Update enriched cache
+        if (enrichedCache[findingId]) {
+          setEnrichedCache(prev => ({
+            ...prev,
+            [findingId]: {
+              ...prev[findingId],
+              finding: { ...prev[findingId].finding, ...payload },
+            },
+          }))
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to save treatment fields:', err.message)
+    }
+    setSavingTreatment(false)
+  }
+
   // Derived unique values for filters
   const categories = useMemo(() => [...new Set(findings.map(f => f.category))].filter(Boolean), [findings])
 
@@ -252,9 +284,21 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
   const enriched = selectedId ? enrichedCache[selectedId] : null
   const isEnrichedLoading = enrichedLoading === selectedId
 
+  // Load treatment fields when enriched data changes
+  useEffect(() => {
+    if (enriched) {
+      setTreatmentOwner((enriched.finding as any).owner || '')
+      setTreatmentDueDate((enriched.finding as any).due_date || '')
+      setTreatmentNote((enriched.finding as any).treatment_note || '')
+    }
+  }, [selectedId, enriched?.finding?.id])
+
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {}
-    findings.forEach(f => { counts[f.status] = (counts[f.status] || 0) + 1 })
+    findings.forEach(f => {
+      const status = f.status || 'open'
+      counts[status] = (counts[status] || 0) + 1
+    })
     return counts
   }, [findings])
 
@@ -383,6 +427,9 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
                         </td>
                         <td className="px-4 py-2.5">
                           <span className="whitespace-pre-wrap">{f.title}</span>
+                          {assetCache[f.asset_id] && (
+                            <span className="text-xs font-mono text-gray-400 ml-1.5">[{assetCache[f.asset_id].ip_address}]</span>
+                          )}
                         </td>
                         <td className="px-4 py-2.5">
                           {assetCache[f.asset_id] ? (
@@ -498,6 +545,48 @@ export default function VulnMgmtPage({ embedded }: { embedded?: boolean }) {
                           </div>
                         </div>
                       )}
+
+                      {/* Treatment Fields */}
+                      <div className="mt-3 p-3 bg-gray-50 rounded-lg space-y-2">
+                        <p className="text-xs font-semibold text-gray-600">Treatment</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-gray-500">Owner</label>
+                            <input
+                              type="text"
+                              value={treatmentOwner}
+                              onChange={e => setTreatmentOwner(e.target.value)}
+                              placeholder="Assign owner..."
+                              className="w-full text-xs border rounded px-2 py-1.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500">Due Date</label>
+                            <input
+                              type="date"
+                              value={treatmentDueDate}
+                              onChange={e => setTreatmentDueDate(e.target.value)}
+                              className="w-full text-xs border rounded px-2 py-1.5"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500">Treatment Note</label>
+                          <textarea
+                            value={treatmentNote}
+                            onChange={e => setTreatmentNote(e.target.value)}
+                            placeholder="Add treatment note..."
+                            className="w-full text-xs border rounded px-2 py-1.5 h-14"
+                          />
+                        </div>
+                        <button
+                          onClick={() => saveTreatmentFields(enriched.finding.id)}
+                          disabled={savingTreatment}
+                          className="text-xs px-3 py-1.5 bg-brand-600 text-white rounded-lg disabled:opacity-50"
+                        >
+                          {savingTreatment ? 'Saving...' : 'Save Treatment'}
+                        </button>
+                      </div>
                     </div>
 
                     <div className="divide-y">

@@ -30,6 +30,7 @@ export default function AssetsPage() {
   const [refreshCidr, setRefreshCidr] = useState('')
   const [refreshLoading, setRefreshLoading] = useState(false)
   const [refreshResult, setRefreshResult] = useState<any>(null)
+  const [showUpdatedAssets, setShowUpdatedAssets] = useState(false)
 
   // Delete modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
@@ -490,41 +491,75 @@ export default function AssetsPage() {
                     </p>
                     {(() => {
                       const createdIps: string[] = refreshResult.created_ips || []
+                      const allHosts: any[] = refreshResult.hosts || []
                       const newHosts = createdIps.length > 0
-                        ? (refreshResult.hosts || []).filter((h: any) => createdIps.includes(h.ip))
+                        ? allHosts.filter((h: any) => createdIps.includes(h.ip))
                         : []
-                      return newHosts.length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <p className="text-xs font-semibold text-green-800 mb-2">Newly discovered assets:</p>
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="border-b border-green-200">
-                                <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">IP Address</th>
-                                <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">Hostname</th>
-                                <th className="text-left py-1.5 text-green-800 font-semibold">Open Ports</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {newHosts.map((host: any) => (
-                                <tr key={host.ip} className="border-b border-green-100 last:border-0">
-                                  <td className="py-1.5 pr-3 font-mono">{host.ip}</td>
-                                  <td className="py-1.5 pr-3 text-gray-600">{host.hostname || '-'}</td>
-                                  <td className="py-1.5">
-                                    <div className="flex flex-wrap gap-1">
-                                      {host.ports?.map((p: any) => (
-                                        <span key={p.port} className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-mono">
-                                          {p.port}/{p.proto}{p.service ? ` ${p.service}` : ''}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                      const updatedHosts = allHosts.filter((h: any) => !createdIps.includes(h.ip))
+                      const displayHosts = showUpdatedAssets ? allHosts : newHosts
+
+                      return (
+                        <div>
+                          {newHosts.length > 0 || showUpdatedAssets ? (
+                            <div className="overflow-x-auto">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-semibold text-green-800">
+                                  {showUpdatedAssets ? `All hosts (${allHosts.length})` : `Newly discovered assets (${newHosts.length}):`}
+                                </p>
+                                {updatedHosts.length > 0 && (
+                                  <label className="flex items-center gap-1.5 text-xs text-green-700 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={showUpdatedAssets}
+                                      onChange={(e) => setShowUpdatedAssets(e.target.checked)}
+                                      className="w-3.5 h-3.5 rounded border-green-400"
+                                    />
+                                    Show updated assets too ({updatedHosts.length})
+                                  </label>
+                                )}
+                              </div>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-green-200">
+                                    <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">IP Address</th>
+                                    <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">Hostname</th>
+                                    <th className="text-left py-1.5 pr-3 text-green-800 font-semibold">Open Ports</th>
+                                    {showUpdatedAssets && <th className="text-left py-1.5 text-green-800 font-semibold">Status</th>}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {displayHosts.map((host: any) => {
+                                    const isNew = createdIps.includes(host.ip)
+                                    return (
+                                      <tr key={host.ip} className="border-b border-green-100 last:border-0">
+                                        <td className="py-1.5 pr-3 font-mono">{host.ip}</td>
+                                        <td className="py-1.5 pr-3 text-gray-600">{host.hostname || '-'}</td>
+                                        <td className="py-1.5 pr-3">
+                                          <div className="flex flex-wrap gap-1">
+                                            {host.ports?.map((p: any) => (
+                                              <span key={p.port} className="inline-flex items-center px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-mono">
+                                                {p.port}/{p.proto}{p.service ? ` ${p.service}` : ''}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </td>
+                                        {showUpdatedAssets && (
+                                          <td className="py-1.5">
+                                            <span className={`text-xs px-1.5 py-0.5 rounded ${isNew ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                                              {isNew ? 'New' : 'Updated'}
+                                            </span>
+                                          </td>
+                                        )}
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-green-600">No new assets discovered. All hosts were already in the inventory.</p>
+                          )}
                         </div>
-                      ) : (
-                        <p className="text-xs text-green-600">No new assets discovered. All hosts were already in the inventory.</p>
                       )
                     })()}
                     <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-green-200">

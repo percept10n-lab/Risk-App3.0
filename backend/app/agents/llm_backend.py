@@ -162,6 +162,119 @@ class LLMBackend:
         # Max iterations reached — return last response
         return await self.complete(working_messages)
 
+    async def stream_with_tools(
+        self,
+        messages: list[LLMMessage],
+        tools: list[ToolDefinition],
+        tool_executor: Callable[[str, dict], Awaitable[str]],
+        max_iterations: int | None = None,
+    ) -> AsyncIterator[dict]:
+        """Agentic tool loop with streaming final answer.
+
+        Yields SSE-style dicts:
+          {"type": "status", "message": "..."}
+          {"type": "tool_result", "tool": "...", "summary": "..."}
+          {"type": "token", "content": "..."}
+        """
+        if max_iterations is None:
+            max_iterations = getattr(settings, "ai_max_tool_iterations", 5)
+
+        working_messages = list(messages)
+
+        for _ in range(max_iterations):
+            # Non-streaming complete for tool iterations
+            response = await self.complete(working_messages, tools)
+
+            if not response.tool_calls:
+                # No tool calls → stream the final answer
+                # Re-do as streaming for token-by-token output
+                # But we already have the content from complete(), so yield it in chunks
+                content = response.content or ""
+                if content:
+                    # Yield as tokens (split by spaces to simulate streaming)
+                    words = content.split(" ")
+                    for i, word in enumerate(words):
+                        token = word if i == 0 else " " + word
+                        yield {"type": "token", "content": token}
+                return
+
+            # Append assistant message with tool calls
+            working_messages.append(LLMMessage(
+                role="assistant",
+                content=response.content or "",
+                tool_calls=response.tool_calls,
+            ))
+
+            # Execute each tool call
+            for tc in response.tool_calls:
+                func = tc.get("function", tc)
+                name = func.get("name", "")
+                args = func.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = {}
+
+                yield {"type": "status", "message": f"Calling {name}..."}
+
+                try:
+                    result = await tool_executor(name, args)
+                except Exception as e:
+                    result = f"Error executing {name}: {e}"
+
+                # Check for pending confirmation (write tools)
+                try:
+                    parsed = json.loads(result) if isinstance(result, str) else result
+                    if isinstance(parsed, dict) and parsed.get("pending_confirmation"):
+                        yield {
+                            "type": "pending_action",
+                            "action": {
+                                "tool": parsed.get("tool", name),
+                                "args": parsed.get("args", args),
+                                "description": parsed.get("description", f"Execute {name}"),
+                            },
+                        }
+                        # Tell the LLM the action requires user approval
+                        tool_msg = f"Action '{name}' requires user confirmation. I've asked the user to approve it."
+                        if self.is_ollama:
+                            working_messages.append(LLMMessage(role="tool", content=tool_msg, name=name))
+                        else:
+                            working_messages.append(LLMMessage(role="tool", content=tool_msg, name=tc.get("id", name)))
+                        continue
+
+                    if isinstance(parsed, list):
+                        summary = f"Found {len(parsed)} results"
+                    elif isinstance(parsed, dict) and "error" in parsed:
+                        summary = parsed["error"]
+                    elif isinstance(parsed, dict):
+                        summary = f"Got data ({len(parsed)} fields)"
+                    else:
+                        summary = str(result)[:100]
+                except Exception:
+                    summary = str(result)[:100]
+
+                yield {"type": "tool_result", "tool": name, "summary": summary}
+
+                # Append tool result
+                if self.is_ollama:
+                    working_messages.append(LLMMessage(
+                        role="tool", content=str(result), name=name,
+                    ))
+                else:
+                    working_messages.append(LLMMessage(
+                        role="tool", content=str(result), name=tc.get("id", name),
+                    ))
+
+        # Max iterations — get final answer without tools
+        response = await self.complete(working_messages)
+        content = response.content or ""
+        if content:
+            words = content.split(" ")
+            for i, word in enumerate(words):
+                token = word if i == 0 else " " + word
+                yield {"type": "token", "content": token}
+
     async def stream(
         self,
         messages: list[LLMMessage],

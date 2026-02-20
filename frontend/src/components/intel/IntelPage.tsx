@@ -65,7 +65,7 @@ export default function IntelPage({ embedded }: { embedded?: boolean }) {
 
   useEffect(() => {
     loadBrief()
-    loadNews()
+    loadNews(true)
   }, [])
 
   async function loadSummary(days: Period) {

@@ -1,6 +1,6 @@
 import uuid
-from datetime import datetime
-from sqlalchemy import String, DateTime, JSON, Text, Float, Integer, ForeignKey, Index, func
+from datetime import datetime, date
+from sqlalchemy import String, DateTime, Date, JSON, Text, Float, Integer, ForeignKey, Index, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 import enum
@@ -48,6 +48,9 @@ class Finding(Base):
     exploitability_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     exploitability_rationale: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=FindingStatus.open.value, index=True)
+    owner: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    treatment_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     dedupe_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())

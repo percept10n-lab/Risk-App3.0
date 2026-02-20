@@ -73,6 +73,30 @@ async def init_db():
         except Exception:
             pass
 
+        # Add residual_likelihood and residual_impact columns for risk matrix
+        try:
+            await conn.execute(text("ALTER TABLE risks ADD COLUMN residual_likelihood VARCHAR(20)"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE risks ADD COLUMN residual_impact VARCHAR(20)"))
+        except Exception:
+            pass
+
+        # Add treatment fields to findings
+        try:
+            await conn.execute(text("ALTER TABLE findings ADD COLUMN owner VARCHAR(255)"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE findings ADD COLUMN due_date DATE"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE findings ADD COLUMN treatment_note TEXT"))
+        except Exception:
+            pass
+
         # Backfill c4_level for existing threats that have NULL
         await conn.execute(text(
             "UPDATE threats SET c4_level = 'component' "

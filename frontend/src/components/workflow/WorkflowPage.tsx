@@ -1,12 +1,12 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import PageHeader from '../common/PageHeader'
 import Badge from '../common/Badge'
 import NmapConsole from '../nmap/NmapConsole'
 import { useRunStore } from '../../stores/runStore'
 import { useAssetStore } from '../../stores/assetStore'
-import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle, Network, Server } from 'lucide-react'
+import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle, Network, Server, Globe, Search, X } from 'lucide-react'
 
-type WorkflowMode = 'cidr' | 'existing'
+type WorkflowMode = 'cidr' | 'existing' | 'ip'
 
 const STEPS = [
   { key: 'discovery', label: 'Asset Discovery', description: 'Scan network for devices' },
@@ -32,10 +32,15 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
   const { assets, fetchAssets } = useAssetStore()
   const [mode, setMode] = useState<WorkflowMode>('cidr')
   const [subnet, setSubnet] = useState('192.168.178.0/24')
+  const [ipInput, setIpInput] = useState('')
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set())
+  const [assetSearch, setAssetSearch] = useState('')
+  const [showAssetPicker, setShowAssetPicker] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [consoleLines, setConsoleLines] = useState<string[]>([])
   const [wsConnected, setWsConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
+  const pickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetchRuns()
@@ -119,6 +124,47 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
     }
   }, [])
 
+  // Close asset picker on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowAssetPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filteredAssets = useMemo(() => {
+    if (!assetSearch) return assets
+    const q = assetSearch.toLowerCase()
+    return assets.filter(
+      (a) =>
+        a.ip_address?.toLowerCase().includes(q) ||
+        a.hostname?.toLowerCase().includes(q) ||
+        a.zone?.toLowerCase().includes(q)
+    )
+  }, [assets, assetSearch])
+
+  const toggleAsset = (id: string) => {
+    setSelectedAssetIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAllFiltered = () => {
+    setSelectedAssetIds((prev) => {
+      const next = new Set(prev)
+      filteredAssets.forEach((a) => next.add(a.id))
+      return next
+    })
+  }
+
+  const deselectAll = () => setSelectedAssetIds(new Set())
+
   const validateSubnet = (value: string): string | null => {
     const match = value.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(\/(\d{1,2}))?$/)
     if (!match) return 'Invalid IP address or CIDR notation'
@@ -145,20 +191,71 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
       wsRef.current?.close()
       const run = await createRun({ scope: { subnets: [subnet] } })
       if (run?.id) connectWebSocket(run.id)
-    } else {
-      // Use existing assets — skip discovery step
-      if (assets.length === 0) {
-        setValidationError('No existing assets found. Discover assets first or use CIDR mode.')
+    } else if (mode === 'existing') {
+      if (selectedAssetIds.size === 0) {
+        setValidationError('Select at least one asset from the list.')
         return
       }
       setValidationError(null)
-      setConsoleLines([`$ Starting assessment pipeline using ${assets.length} existing assets`, ''])
+      setShowAssetPicker(false)
+      setConsoleLines([`$ Starting assessment pipeline using ${selectedAssetIds.size} selected assets`, ''])
       wsRef.current?.close()
       const run = await createRun({
-        scope: { asset_ids: assets.map(a => a.id) },
+        scope: { asset_ids: [...selectedAssetIds] },
         skip_steps: ['discovery'],
       })
       if (run?.id) connectWebSocket(run.id)
+    } else {
+      // IP mode
+      const ips = ipInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      if (ips.length === 0) {
+        setValidationError('Enter at least one IP address.')
+        return
+      }
+      // Validate each IP
+      for (const ip of ips) {
+        const err = validateSubnet(ip)
+        if (err) {
+          setValidationError(`Invalid IP "${ip}": ${err}`)
+          return
+        }
+      }
+      setValidationError(null)
+
+      // Match IPs to existing assets
+      const matchedIds: string[] = []
+      const unmatchedIps: string[] = []
+      for (const ip of ips) {
+        const found = assets.find((a) => a.ip_address === ip)
+        if (found) {
+          matchedIds.push(found.id)
+        } else {
+          unmatchedIps.push(ip)
+        }
+      }
+
+      if (unmatchedIps.length > 0) {
+        // Discover unknown IPs as /32 subnets
+        const subnets = unmatchedIps.map((ip) => (ip.includes('/') ? ip : `${ip}/32`))
+        setConsoleLines([`$ Starting assessment pipeline — discovering ${unmatchedIps.join(', ')}${matchedIds.length ? ` + ${matchedIds.length} known assets` : ''}`, ''])
+        wsRef.current?.close()
+        const scope: Record<string, any> = { subnets }
+        if (matchedIds.length) scope.asset_ids = matchedIds
+        const run = await createRun({ scope })
+        if (run?.id) connectWebSocket(run.id)
+      } else {
+        // All IPs matched existing assets
+        setConsoleLines([`$ Starting assessment pipeline using ${matchedIds.length} existing assets`, ''])
+        wsRef.current?.close()
+        const run = await createRun({
+          scope: { asset_ids: matchedIds },
+          skip_steps: ['discovery'],
+        })
+        if (run?.id) connectWebSocket(run.id)
+      }
     }
   }
 
@@ -171,7 +268,7 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
   }
 
   const isRunning = activeRun && ['running', 'pending'].includes(activeRun.status)
-  const showConsole = consoleLines.length > 0
+  const showConsole = consoleLines.length > 0 || isRunning
 
   return (
     <div>
@@ -183,18 +280,25 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
             <div className="flex items-center gap-3">
               <div className="flex rounded-lg border border-gray-300 overflow-hidden">
                 <button
-                  onClick={() => setMode('cidr')}
+                  onClick={() => { setMode('cidr'); setShowAssetPicker(false) }}
                   className={`flex items-center gap-1.5 px-3 py-2 text-sm ${mode === 'cidr' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   disabled={!!isRunning}
                 >
                   <Network className="w-3.5 h-3.5" /> CIDR
                 </button>
                 <button
-                  onClick={() => setMode('existing')}
+                  onClick={() => { setMode('existing'); setShowAssetPicker(true) }}
                   className={`flex items-center gap-1.5 px-3 py-2 text-sm border-l ${mode === 'existing' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   disabled={!!isRunning}
                 >
-                  <Server className="w-3.5 h-3.5" /> Existing ({assets.length})
+                  <Server className="w-3.5 h-3.5" /> Existing{selectedAssetIds.size > 0 ? ` (${selectedAssetIds.size})` : ` (${assets.length})`}
+                </button>
+                <button
+                  onClick={() => { setMode('ip'); setShowAssetPicker(false) }}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm border-l ${mode === 'ip' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                  disabled={!!isRunning}
+                >
+                  <Globe className="w-3.5 h-3.5" /> IP
                 </button>
               </div>
               {mode === 'cidr' && (
@@ -204,6 +308,16 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
                   onChange={(e) => { setSubnet(e.target.value); setValidationError(null) }}
                   placeholder="192.168.178.0/24"
                   className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-44"
+                  disabled={!!isRunning}
+                />
+              )}
+              {mode === 'ip' && (
+                <input
+                  type="text"
+                  value={ipInput}
+                  onChange={(e) => { setIpInput(e.target.value); setValidationError(null) }}
+                  placeholder="192.168.178.1, 10.0.0.5"
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-56"
                   disabled={!!isRunning}
                 />
               )}
@@ -223,18 +337,25 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
         <div className="flex items-center gap-3 mb-4">
           <div className="flex rounded-lg border border-gray-300 overflow-hidden">
             <button
-              onClick={() => setMode('cidr')}
+              onClick={() => { setMode('cidr'); setShowAssetPicker(false) }}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm ${mode === 'cidr' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
               disabled={!!isRunning}
             >
               <Network className="w-3.5 h-3.5" /> CIDR
             </button>
             <button
-              onClick={() => setMode('existing')}
+              onClick={() => { setMode('existing'); setShowAssetPicker(true) }}
               className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm border-l ${mode === 'existing' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
               disabled={!!isRunning}
             >
-              <Server className="w-3.5 h-3.5" /> Existing ({assets.length})
+              <Server className="w-3.5 h-3.5" /> Existing{selectedAssetIds.size > 0 ? ` (${selectedAssetIds.size})` : ` (${assets.length})`}
+            </button>
+            <button
+              onClick={() => { setMode('ip'); setShowAssetPicker(false) }}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm border-l ${mode === 'ip' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+              disabled={!!isRunning}
+            >
+              <Globe className="w-3.5 h-3.5" /> IP
             </button>
           </div>
           {mode === 'cidr' && (
@@ -247,6 +368,16 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
               disabled={!!isRunning}
             />
           )}
+          {mode === 'ip' && (
+            <input
+              type="text"
+              value={ipInput}
+              onChange={(e) => { setIpInput(e.target.value); setValidationError(null) }}
+              placeholder="192.168.178.1, 10.0.0.5"
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-56"
+              disabled={!!isRunning}
+            />
+          )}
           <button
             onClick={handleNewRun}
             disabled={loading || !!isRunning}
@@ -254,6 +385,67 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
           >
             <Play className="w-4 h-4" /> New Assessment Run
           </button>
+        </div>
+      )}
+
+      {/* Asset Picker Dropdown for Existing mode */}
+      {mode === 'existing' && showAssetPicker && !isRunning && (
+        <div ref={pickerRef} className="mb-4 card border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={assetSearch}
+                onChange={(e) => setAssetSearch(e.target.value)}
+                placeholder="Filter by IP, hostname, or zone..."
+                className="w-full pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              {assetSearch && (
+                <button onClick={() => setAssetSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+            <button onClick={selectAllFiltered} className="text-xs text-brand-600 hover:text-brand-700 font-medium whitespace-nowrap">
+              Select All
+            </button>
+            <span className="text-gray-300">|</span>
+            <button onClick={deselectAll} className="text-xs text-gray-500 hover:text-gray-700 font-medium whitespace-nowrap">
+              None
+            </button>
+            <span className="text-xs text-gray-400 whitespace-nowrap">
+              {selectedAssetIds.size} selected
+            </span>
+          </div>
+          <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+            {filteredAssets.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-gray-500">
+                {assets.length === 0 ? 'No assets discovered yet.' : 'No assets match your filter.'}
+              </div>
+            ) : (
+              filteredAssets.map((asset) => (
+                <label
+                  key={asset.id}
+                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedAssetIds.has(asset.id)}
+                    onChange={() => toggleAsset(asset.id)}
+                    className="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                  />
+                  <span className="font-mono text-sm text-gray-800">{asset.ip_address}</span>
+                  {asset.hostname && (
+                    <span className="text-sm text-gray-500">— {asset.hostname}</span>
+                  )}
+                  <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    {asset.zone}
+                  </span>
+                </label>
+              ))
+            )}
+          </div>
         </div>
       )}
 
@@ -322,7 +514,7 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-500">Run ID</p>
-                  <p className="font-mono text-sm">{activeRun.id.slice(0, 8)}...</p>
+                  <p className="font-mono text-sm">{activeRun.id.slice(0, 8)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Status</p>
@@ -366,7 +558,22 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-500">No active run. Enter your subnet and start a new assessment.</p>
+              <div className="text-center py-4">
+                <Play className="w-10 h-10 text-brand-400 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-700 mb-1">No active assessment</p>
+                <p className="text-xs text-gray-500 mb-4">
+                  {runs.length === 0
+                    ? 'Start your first assessment to discover assets, find vulnerabilities, and analyze risks.'
+                    : 'Start a new assessment run to scan your network.'}
+                </p>
+                <button
+                  onClick={handleNewRun}
+                  disabled={loading || !!isRunning}
+                  className="btn-primary flex items-center gap-2 mx-auto"
+                >
+                  <Play className="w-4 h-4" /> Start Assessment
+                </button>
+              </div>
             )}
           </div>
 

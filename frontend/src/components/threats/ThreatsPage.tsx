@@ -287,10 +287,10 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
           </span>
         </td>
         <td className="px-4 py-3">
-          <p className="font-medium text-sm">{threat.title}</p>
-          {asset && (
-            <p className="text-xs text-brand-600 font-mono mt-0.5">{asset.ip_address}{asset.hostname ? ` (${asset.hostname})` : ''}</p>
-          )}
+          <p className="font-medium text-sm">
+            {threat.title}
+            {asset && <span className="text-xs font-mono text-gray-400 ml-1.5">[{asset.ip_address}]</span>}
+          </p>
           <p className="text-xs text-gray-500 mt-0.5 line-clamp-2" title={threat.description}>{threat.description}</p>
         </td>
         <td className="px-4 py-3">
@@ -417,20 +417,37 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
   )
 }
 
-/* ───────────────── Tab 2: Generate Threats ───────────────── */
+/* ───────────────── Tab 2: Evaluate & Generate Threats ───────────────── */
 
-interface GenerateResult {
-  status: string
-  threats_created: number
-  threats_skipped_duplicate: number
-  total_assets: number
+interface ThreatCandidate {
+  title: string
+  description: string
+  threat_type: string
+  source: string
+  zone: string | null
+  trust_boundary: string | null
+  confidence: number
+  c4_level: string | null
+  stride_category_detail: string | null
+  asset_id: string
+  asset_ip: string
+  asset_hostname: string | null
+  is_duplicate: boolean
 }
 
-interface ZoneResult {
+interface EvaluateResult {
+  high: ThreatCandidate[]
+  medium: ThreatCandidate[]
+  low: ThreatCandidate[]
+  total_candidates: number
+  total_assets: number
+  duplicates: number
+}
+
+interface AcceptResult {
   status: string
-  zone: string
-  threats_created: number
-  assets_in_zone: number
+  created: number
+  skipped: number
 }
 
 function GenerateTab() {
@@ -439,23 +456,81 @@ function GenerateTab() {
 
   const [selectedAssetId, setSelectedAssetId] = useState('')
   const [selectedZone, setSelectedZone] = useState('')
+  const [evaluateMode, setEvaluateMode] = useState<'asset' | 'all' | 'zone'>('all')
   const [loading, setLoading] = useState<string | null>(null)
-  const [genResult, setGenResult] = useState<GenerateResult | null>(null)
-  const [zoneResult, setZoneResult] = useState<ZoneResult | null>(null)
+  const [evalResult, setEvalResult] = useState<EvaluateResult | null>(null)
+  const [acceptResult, setAcceptResult] = useState<AcceptResult | null>(null)
+  const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchAssets()
   }, [])
 
-  const handleGenerateForAsset = async () => {
-    if (!selectedAssetId) return
-    setLoading('asset')
+  // Generate a unique key for each candidate
+  const candidateKey = (c: ThreatCandidate) => `${c.asset_id}:${c.title}`
+
+  // Initialize selections when evaluation completes
+  const initializeSelections = (result: EvaluateResult) => {
+    const selected = new Set<string>()
+    // Pre-check high confidence, pre-check medium non-duplicates
+    result.high.forEach((c) => selected.add(candidateKey(c)))
+    result.medium.forEach((c) => { if (!c.is_duplicate) selected.add(candidateKey(c)) })
+    // Low confidence: unchecked by default
+    setSelectedCandidates(selected)
+  }
+
+  const handleEvaluate = async () => {
+    setLoading('evaluate')
     setError(null)
-    setGenResult(null)
+    setEvalResult(null)
+    setAcceptResult(null)
     try {
-      const res = await threatsApi.generate({ asset_id: selectedAssetId })
-      setGenResult(res.data)
+      const params: Record<string, string> = {}
+      if (evaluateMode === 'asset' && selectedAssetId) params.asset_id = selectedAssetId
+      if (evaluateMode === 'zone' && selectedZone) params.zone = selectedZone
+      const res = await threatsApi.evaluate(params)
+      setEvalResult(res.data)
+      initializeSelections(res.data)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message)
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const toggleCandidate = (c: ThreatCandidate) => {
+    const key = candidateKey(c)
+    setSelectedCandidates((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const toggleTier = (candidates: ThreatCandidate[], checked: boolean) => {
+    setSelectedCandidates((prev) => {
+      const next = new Set(prev)
+      candidates.forEach((c) => {
+        const key = candidateKey(c)
+        if (checked) next.add(key)
+        else next.delete(key)
+      })
+      return next
+    })
+  }
+
+  const handleAcceptSelected = async () => {
+    if (!evalResult) return
+    setLoading('accept')
+    setError(null)
+    try {
+      const allCandidates = [...evalResult.high, ...evalResult.medium, ...evalResult.low]
+      const toAccept = allCandidates.filter((c) => selectedCandidates.has(candidateKey(c)))
+      const res = await threatsApi.acceptBatch(toAccept)
+      setAcceptResult(res.data)
+      setEvalResult(null)
       fetchThreats()
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message)
@@ -464,106 +539,163 @@ function GenerateTab() {
     }
   }
 
-  const handleGenerateAll = async () => {
-    setLoading('all')
-    setError(null)
-    setGenResult(null)
-    try {
-      const res = await threatsApi.generate()
-      setGenResult(res.data)
-      fetchThreats()
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message)
-    } finally {
-      setLoading(null)
-    }
-  }
+  const renderTier = (label: string, candidates: ThreatCandidate[], color: string, bgColor: string) => {
+    if (candidates.length === 0) return null
+    const tierSelected = candidates.filter((c) => selectedCandidates.has(candidateKey(c))).length
+    const allChecked = tierSelected === candidates.length
 
-  const handleZoneAnalysis = async () => {
-    if (!selectedZone) return
-    setLoading('zone')
-    setError(null)
-    setZoneResult(null)
-    try {
-      const res = await threatsApi.zoneAnalysis({ zone: selectedZone })
-      setZoneResult(res.data)
-      fetchThreats()
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message)
-    } finally {
-      setLoading(null)
-    }
+    return (
+      <div className="mb-4">
+        <div className={`flex items-center gap-3 px-4 py-2.5 ${bgColor} rounded-t-lg border border-b-0`}>
+          <input
+            type="checkbox"
+            checked={allChecked}
+            onChange={(e) => toggleTier(candidates, e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300"
+          />
+          <span className={`text-sm font-semibold ${color}`}>
+            {label} ({candidates.length})
+          </span>
+          {tierSelected > 0 && tierSelected < candidates.length && (
+            <span className="text-xs text-gray-500">{tierSelected} selected</span>
+          )}
+        </div>
+        <div className="border rounded-b-lg divide-y divide-gray-100">
+          {candidates.map((c) => {
+            const key = candidateKey(c)
+            const checked = selectedCandidates.has(key)
+            return (
+              <label key={key} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleCandidate(c)}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+                <span className="text-sm font-medium flex-1 truncate">{c.title}</span>
+                <span className={`badge ${strideBadgeColor[c.threat_type] || 'bg-gray-100 text-gray-800'}`}>
+                  {strideLabel[c.threat_type] || c.threat_type}
+                </span>
+                <span className="text-xs text-gray-500 font-mono w-10 text-right">
+                  {Math.round(c.confidence * 100)}%
+                </span>
+                <span className="text-xs text-gray-500 font-mono truncate max-w-[140px]">
+                  {c.asset_hostname || c.asset_ip}
+                </span>
+                {c.is_duplicate && (
+                  <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">dup</span>
+                )}
+              </label>
+            )
+          })}
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      {/* Generate for specific asset */}
-      <div className="card p-6">
-        <h3 className="text-lg font-semibold mb-4">Generate for Asset</h3>
-        <p className="text-sm text-gray-500 mb-4">Run STRIDE threat modeling against a specific asset.</p>
-        <div className="flex gap-3">
-          <select
-            value={selectedAssetId}
-            onChange={(e) => setSelectedAssetId(e.target.value)}
-            className="btn-secondary text-sm flex-1"
-          >
-            <option value="">Select an asset...</option>
-            {assets.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.hostname || a.ip_address} ({a.zone})
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={handleGenerateForAsset}
-            disabled={!selectedAssetId || loading === 'asset'}
-            className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading === 'asset' && <Loader2 className="w-4 h-4 animate-spin" />}
-            Generate for Asset
-          </button>
-        </div>
-      </div>
+      {/* Step 1: Evaluate Controls */}
+      {!evalResult && (
+        <>
+          <div className="card p-6">
+            <h3 className="text-lg font-semibold mb-4">Evaluate Threats</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Generate threat candidates with confidence scoring. Review and approve before saving.
+            </p>
+            <div className="flex gap-3 mb-4">
+              <select
+                value={evaluateMode}
+                onChange={(e) => setEvaluateMode(e.target.value as any)}
+                className="btn-secondary text-sm"
+              >
+                <option value="all">All Assets</option>
+                <option value="asset">Specific Asset</option>
+                <option value="zone">By Zone</option>
+              </select>
+              {evaluateMode === 'asset' && (
+                <select
+                  value={selectedAssetId}
+                  onChange={(e) => setSelectedAssetId(e.target.value)}
+                  className="btn-secondary text-sm flex-1"
+                >
+                  <option value="">Select an asset...</option>
+                  {assets.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.hostname || a.ip_address} ({a.zone})
+                    </option>
+                  ))}
+                </select>
+              )}
+              {evaluateMode === 'zone' && (
+                <select
+                  value={selectedZone}
+                  onChange={(e) => setSelectedZone(e.target.value)}
+                  className="btn-secondary text-sm"
+                >
+                  <option value="">Select a zone...</option>
+                  {ZONES.map((z) => (
+                    <option key={z.value} value={z.value}>{z.label}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <button
+              onClick={handleEvaluate}
+              disabled={
+                loading === 'evaluate' ||
+                (evaluateMode === 'asset' && !selectedAssetId) ||
+                (evaluateMode === 'zone' && !selectedZone)
+              }
+              className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2"
+            >
+              {loading === 'evaluate' && <Loader2 className="w-4 h-4 animate-spin" />}
+              Evaluate
+            </button>
+          </div>
+        </>
+      )}
 
-      {/* Generate for ALL assets */}
-      <div className="card p-6">
-        <h3 className="text-lg font-semibold mb-4">Generate for ALL Assets</h3>
-        <p className="text-sm text-gray-500 mb-4">Run STRIDE threat modeling against every discovered asset.</p>
-        <button
-          onClick={handleGenerateAll}
-          disabled={loading === 'all'}
-          className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2"
-        >
-          {loading === 'all' && <Loader2 className="w-4 h-4 animate-spin" />}
-          Generate for ALL Assets
-        </button>
-      </div>
+      {/* Step 2: Review candidates */}
+      {evalResult && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold">Review Threat Candidates</h3>
+              <p className="text-sm text-gray-500">
+                {evalResult.total_candidates} candidates from {evalResult.total_assets} assets
+                {evalResult.duplicates > 0 && ` (${evalResult.duplicates} duplicates)`}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={handleAcceptSelected}
+                disabled={selectedCandidates.size === 0 || loading === 'accept'}
+                className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2"
+              >
+                {loading === 'accept' && <Loader2 className="w-4 h-4 animate-spin" />}
+                Accept Selected ({selectedCandidates.size})
+              </button>
+              <button
+                onClick={() => { setEvalResult(null); setSelectedCandidates(new Set()) }}
+                className="btn-secondary text-sm"
+              >
+                Discard All
+              </button>
+            </div>
+          </div>
 
-      {/* Zone Analysis */}
-      <div className="card p-6">
-        <h3 className="text-lg font-semibold mb-4">Zone Analysis</h3>
-        <p className="text-sm text-gray-500 mb-4">Analyze threats specific to a network zone and its trust boundaries.</p>
-        <div className="flex gap-3">
-          <select
-            value={selectedZone}
-            onChange={(e) => setSelectedZone(e.target.value)}
-            className="btn-secondary text-sm"
-          >
-            <option value="">Select a zone...</option>
-            {ZONES.map((z) => (
-              <option key={z.value} value={z.value}>{z.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={handleZoneAnalysis}
-            disabled={!selectedZone || loading === 'zone'}
-            className="btn-primary text-sm disabled:opacity-50 flex items-center gap-2"
-          >
-            {loading === 'zone' && <Loader2 className="w-4 h-4 animate-spin" />}
-            Analyze Zone
-          </button>
+          {renderTier('HIGH CONFIDENCE', evalResult.high, 'text-green-700', 'bg-green-50')}
+          {renderTier('MEDIUM CONFIDENCE', evalResult.medium, 'text-yellow-700', 'bg-yellow-50')}
+          {renderTier('LOW CONFIDENCE — review carefully', evalResult.low, 'text-red-700', 'bg-red-50')}
+
+          {evalResult.total_candidates === 0 && (
+            <div className="card p-8 text-center">
+              <p className="text-sm text-gray-500">No threat candidates generated. All assets may already have comprehensive threat models.</p>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Results */}
       {error && (
@@ -573,37 +705,17 @@ function GenerateTab() {
         </div>
       )}
 
-      {genResult && (
+      {acceptResult && (
         <div className="card p-4 border-green-200 bg-green-50">
-          <p className="text-sm text-green-700 font-medium">Threat Generation Complete</p>
-          <div className="grid grid-cols-3 gap-4 mt-3">
+          <p className="text-sm text-green-700 font-medium">Threats Accepted</p>
+          <div className="grid grid-cols-2 gap-4 mt-3">
             <div className="text-center">
-              <p className="text-2xl font-bold text-green-700">{genResult.threats_created}</p>
+              <p className="text-2xl font-bold text-green-700">{acceptResult.created}</p>
               <p className="text-xs text-green-600">Created</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-yellow-700">{genResult.threats_skipped_duplicate}</p>
+              <p className="text-2xl font-bold text-yellow-700">{acceptResult.skipped}</p>
               <p className="text-xs text-yellow-600">Skipped (duplicate)</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-700">{genResult.total_assets}</p>
-              <p className="text-xs text-gray-600">Assets Processed</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {zoneResult && (
-        <div className="card p-4 border-green-200 bg-green-50">
-          <p className="text-sm text-green-700 font-medium">Zone Analysis Complete — {zoneResult.zone}</p>
-          <div className="grid grid-cols-2 gap-4 mt-3">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-green-700">{zoneResult.threats_created}</p>
-              <p className="text-xs text-green-600">Threats Created</p>
-            </div>
-            <div className="text-center">
-              <p className="text-2xl font-bold text-gray-700">{zoneResult.assets_in_zone}</p>
-              <p className="text-xs text-gray-600">Assets in Zone</p>
             </div>
           </div>
         </div>

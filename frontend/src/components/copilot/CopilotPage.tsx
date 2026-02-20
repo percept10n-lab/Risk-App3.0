@@ -256,7 +256,7 @@ export default function CopilotPage({ embedded }: { embedded?: boolean }) {
       {/* Agent Chat Tab */}
       {activeTab === 'agent' && (
         <div className="card overflow-hidden">
-          <AgentChat />
+          <AgentChat context={{ page: 'copilot', summary: 'User is in the AI Defense Copilot page with access to triage and remediation workflows.' }} />
         </div>
       )}
 

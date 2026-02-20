@@ -50,7 +50,9 @@ CHAT_CONTRACT = CopilotContract(
         "- Risk scenarios with likelihood/impact assessments\n"
         "- MITRE ATT&CK technique mappings\n\n"
         "ALWAYS use your tools to look up real data before answering. "
-        "Format responses in clear markdown. Be concise but thorough."
+        "Format responses in clear markdown. Be concise but thorough.\n\n"
+        "After answering, consider what the user might want to explore next based on your response. "
+        "The system will automatically generate follow-up suggestions."
     ),
     acceptance_criteria=[
         "References only IPs/hostnames present in asset DB",

@@ -163,6 +163,116 @@ class GovernedCopilot:
             result["source_detail"] = f"LLM error: {type(e).__name__}"
             return result
 
+    async def chat_stream(
+        self, message: str, conversation: list[dict] | None = None, context: dict | None = None
+    ):
+        """Async generator — governed streaming chat. Yields SSE event dicts."""
+        conversation = conversation or []
+
+        # 1. Check if LLM is available
+        llm_available = await self.llm.is_available()
+        if not llm_available:
+            result = await self.fallback_agent.chat(message, conversation)
+            result["source"] = "rule_based"
+            yield {"type": "token", "content": result.get("content", "")}
+            yield {"type": "done", "source": "rule_based", "suggestions": []}
+            return
+
+        # 2. Check reputation
+        if not await self.reputation.is_allowed("chat"):
+            result = await self.fallback_agent.chat(message, conversation)
+            result["source"] = "rule_based"
+            yield {"type": "token", "content": result.get("content", "")}
+            yield {"type": "done", "source": "rule_based", "suggestions": []}
+            return
+
+        # 3. Explicit commands stay rule-based
+        if self._is_explicit_command(message):
+            result = await self.fallback_agent.chat(message, conversation)
+            result["source"] = "rule_based"
+            yield {"type": "token", "content": result.get("content", "")}
+            yield {"type": "done", "source": "rule_based", "suggestions": []}
+            return
+
+        # 4. Build LLM messages
+        try:
+            messages = self._build_messages(CHAT_CONTRACT, message, conversation, context)
+
+            # 5. Stream with tools
+            collected_content = ""
+            async for event in self.llm.stream_with_tools(
+                messages=messages,
+                tools=COPILOT_TOOLS,
+                tool_executor=self.tool_executor.execute,
+            ):
+                if event["type"] == "token":
+                    collected_content += event["content"]
+                yield event
+
+            # 6. Verify output
+            if collected_content.strip():
+                verification = await self.verifier.verify(collected_content, "chat")
+
+                if verification.score >= 0.5:
+                    outcome_score = 1.0 if verification.passed and verification.score >= 0.75 else 0.5
+                else:
+                    outcome_score = -1.0
+
+                await self.reputation.record_outcome("chat", outcome_score)
+
+                # Extract suggestions
+                suggestions = self._extract_suggestions(collected_content, message)
+
+                yield {
+                    "type": "done",
+                    "source": "llm",
+                    "model": self.llm.model,
+                    "suggestions": suggestions,
+                    "verification": {
+                        "passed": verification.passed,
+                        "score": verification.score,
+                    },
+                }
+            else:
+                yield {"type": "done", "source": "llm", "suggestions": []}
+
+        except Exception as e:
+            logger.error("Streaming chat failed, falling back", error=str(e), exc_info=True)
+            result = await self.fallback_agent.chat(message, conversation)
+            yield {"type": "token", "content": result.get("content", "")}
+            yield {"type": "done", "source": "rule_based", "suggestions": []}
+
+    @staticmethod
+    def _extract_suggestions(content: str, user_message: str) -> list[str]:
+        """Extract follow-up suggestions based on response content."""
+        suggestions = []
+        content_lower = content.lower()
+
+        if "finding" in content_lower or "vulnerability" in content_lower:
+            suggestions.append("Show remediation steps")
+            suggestions.append("Which findings are most urgent?")
+        if "risk" in content_lower:
+            suggestions.append("How can I reduce these risks?")
+            suggestions.append("Show the risk matrix")
+        if "threat" in content_lower:
+            suggestions.append("Show MITRE ATT&CK mappings")
+            suggestions.append("Which threats are highest confidence?")
+        if "asset" in content_lower:
+            suggestions.append("Scan for new vulnerabilities")
+            suggestions.append("Show asset exposure details")
+        if "critical" in content_lower or "high" in content_lower:
+            suggestions.append("Generate a report")
+            suggestions.append("Start remediation workflow")
+
+        # Keep max 4 unique suggestions
+        seen = set()
+        unique = []
+        for s in suggestions:
+            if s not in seen:
+                seen.add(s)
+                unique.append(s)
+        return unique[:4]
+
     async def generate_triage_rationale(self, triage_results: dict) -> dict:
         """Add LLM prose to deterministic triage scores."""
         if not await self.llm.is_available() or not await self.reputation.is_allowed("triage"):
@@ -322,9 +432,27 @@ class GovernedCopilot:
         contract,
         user_message: str,
         conversation: list[dict],
+        context: dict | None = None,
     ) -> list[LLMMessage]:
-        """Build message list: system + last 10 turns + user message."""
+        """Build message list: system + context + last 10 turns + user message."""
         messages = [contract.to_system_message()]
+
+        # Inject page context if provided
+        if context:
+            ctx_parts = []
+            if context.get("page"):
+                ctx_parts.append(f"The user is currently on the {context['page']} page.")
+            if context.get("entity_type") and context.get("entity_id"):
+                ctx_parts.append(f"They are viewing {context['entity_type']} ID: {context['entity_id']}.")
+            if context.get("filters"):
+                ctx_parts.append(f"Active filters: {context['filters']}.")
+            if context.get("summary"):
+                ctx_parts.append(context["summary"])
+            if ctx_parts:
+                messages.append(LLMMessage(
+                    role="system",
+                    content="Current user context: " + " ".join(ctx_parts),
+                ))
 
         # Include last 10 conversation turns
         recent = conversation[-10:] if len(conversation) > 10 else conversation

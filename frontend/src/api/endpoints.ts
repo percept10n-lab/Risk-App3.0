@@ -41,6 +41,10 @@ export const threatsApi = {
   delete: (id: string) => api.delete(`/threats/${id}`),
   generate: (data?: { asset_id?: string; run_id?: string }) =>
     api.post('/threats/generate', data || {}),
+  evaluate: (data?: { asset_id?: string; zone?: string }) =>
+    api.post('/threats/evaluate', data || {}),
+  acceptBatch: (threats: Record<string, any>[]) =>
+    api.post('/threats/accept-batch', { threats }),
   zoneAnalysis: (data: { zone: string; run_id?: string }) =>
     api.post('/threats/zone-analysis', data),
   stats: () => api.get('/threats/stats'),
@@ -115,8 +119,11 @@ export const copilotApi = {
   mitreSuggest: (findingId: string) => api.post('/copilot/mitre-suggest', null, { params: { finding_id: findingId } }),
   narrative: (data: any) => api.post('/copilot/narrative', data),
   suggestions: () => api.get('/copilot/suggestions'),
-  chat: (message: string, conversation: Array<{ role: string; content: string }>) =>
-    api.post('/copilot/chat', { message, conversation }),
+  chat: (message: string, conversation: Array<{ role: string; content: string }>, context?: Record<string, any>) =>
+    api.post('/copilot/chat', { message, conversation, context }),
+  executeTool: (data: { tool: string; args: Record<string, any> }) =>
+    api.post('/copilot/execute-tool', data),
+  insights: () => api.get('/copilot/insights'),
   status: () => api.get('/copilot/status'),
 }
 

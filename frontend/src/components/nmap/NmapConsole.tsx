@@ -6,6 +6,15 @@ interface NmapConsoleProps {
   connected: boolean
 }
 
+function colorClass(line: string): string {
+  if (line.includes('ERROR') || line.includes('failed') || line.includes('FAIL')) return 'text-red-400'
+  if (line.includes('WARNING') || line.includes('⚠')) return 'text-yellow-400'
+  if (line.includes('✓') || line.includes('Complete') || line.includes('completed') || line.includes('finished') || line.includes('success')) return 'text-emerald-400'
+  if (line.startsWith('[') && line.includes('] >>')) return 'text-cyan-400'
+  if (line.startsWith('$')) return 'text-blue-400'
+  return 'text-green-400'
+}
+
 export default function NmapConsole({ lines, connected }: NmapConsoleProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -37,12 +46,12 @@ export default function NmapConsole({ lines, connected }: NmapConsoleProps) {
       </div>
 
       {/* Terminal body */}
-      <div className="bg-gray-950 p-4 font-mono text-sm text-green-400 h-72 overflow-y-auto">
+      <div className="bg-gray-950 p-4 font-mono text-sm h-96 overflow-y-auto">
         {lines.length === 0 ? (
           <span className="text-gray-600">Waiting for output...</span>
         ) : (
           lines.map((line, i) => (
-            <div key={i} className="whitespace-pre-wrap break-all leading-relaxed">
+            <div key={i} className={`whitespace-pre-wrap break-all leading-relaxed ${colorClass(line)}`}>
               {line}
             </div>
           ))

@@ -128,7 +128,93 @@ COPILOT_TOOLS: list[ToolDefinition] = [
             "required": [],
         },
     ),
+    # --- Write tools (require user confirmation) ---
+    ToolDefinition(
+        name="update_finding_status",
+        description="Update the status of a finding (e.g., mark as fixed, in_progress, accepted). Requires user confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "finding_id": {"type": "string", "description": "Finding UUID"},
+                "new_status": {"type": "string", "enum": ["open", "in_progress", "fixed", "accepted", "verified"], "description": "New status"},
+                "rationale": {"type": "string", "description": "Reason for the status change"},
+            },
+            "required": ["finding_id", "new_status"],
+        },
+    ),
+    ToolDefinition(
+        name="apply_risk_treatment",
+        description="Apply a treatment to a risk scenario (accept, mitigate, transfer, avoid). Requires user confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "risk_id": {"type": "string", "description": "Risk UUID"},
+                "treatment": {"type": "string", "enum": ["accept", "mitigate", "transfer", "avoid"], "description": "Treatment type"},
+                "rationale": {"type": "string", "description": "Reason for the treatment choice"},
+            },
+            "required": ["risk_id", "treatment"],
+        },
+    ),
+    ToolDefinition(
+        name="trigger_vulnerability_scan",
+        description="Trigger a vulnerability scan on a specific asset or all assets. Requires user confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "asset_id": {"type": "string", "description": "Asset UUID (omit for all assets)"},
+                "reason": {"type": "string", "description": "Why the scan is needed"},
+            },
+            "required": [],
+        },
+    ),
+    ToolDefinition(
+        name="run_risk_analysis",
+        description="Run risk analysis (ISO 27005) on a specific asset or all assets. Requires user confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "asset_id": {"type": "string", "description": "Asset UUID (omit for all assets)"},
+                "reason": {"type": "string", "description": "Why the analysis is needed"},
+            },
+            "required": [],
+        },
+    ),
+    ToolDefinition(
+        name="generate_report",
+        description="Generate a security report. Requires user confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "report_type": {"type": "string", "enum": ["executive", "technical", "compliance", "risk"], "description": "Report type"},
+                "title": {"type": "string", "description": "Report title"},
+            },
+            "required": ["report_type"],
+        },
+    ),
+    ToolDefinition(
+        name="create_note",
+        description="Create a note/annotation on an entity (finding, asset, risk, threat). Requires user confirmation.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "entity_type": {"type": "string", "enum": ["finding", "asset", "risk", "threat"], "description": "Entity type"},
+                "entity_id": {"type": "string", "description": "Entity UUID"},
+                "content": {"type": "string", "description": "Note content"},
+            },
+            "required": ["entity_type", "entity_id", "content"],
+        },
+    ),
 ]
+
+# Write tools that need confirmation before execution
+WRITE_TOOL_NAMES = {
+    "update_finding_status",
+    "apply_risk_treatment",
+    "trigger_vulnerability_scan",
+    "run_risk_analysis",
+    "generate_report",
+    "create_note",
+}
 
 
 # ------------------------------------------------------------------
@@ -454,3 +540,89 @@ class ToolExecutor:
             }
             for m in mappings
         ]
+
+    # --- Write tools (return pending_confirmation) ---
+
+    async def _tool_update_finding_status(
+        self, finding_id: str, new_status: str, rationale: str = ""
+    ) -> dict:
+        """Validate but don't mutate — return pending confirmation."""
+        result = await self.db.execute(
+            select(Finding).where(Finding.id == finding_id)
+        )
+        finding = result.scalar_one_or_none()
+        if not finding:
+            # Try partial ID
+            result = await self.db.execute(
+                select(Finding).where(Finding.id.like(f"{finding_id}%")).limit(1)
+            )
+            finding = result.scalar_one_or_none()
+        if not finding:
+            return {"error": f"Finding not found: {finding_id}"}
+        return {
+            "pending_confirmation": True,
+            "tool": "update_finding_status",
+            "description": f"Change finding '{finding.title}' status from '{finding.status}' to '{new_status}'",
+            "args": {"finding_id": finding.id, "new_status": new_status, "rationale": rationale},
+        }
+
+    async def _tool_apply_risk_treatment(
+        self, risk_id: str, treatment: str, rationale: str = ""
+    ) -> dict:
+        result = await self.db.execute(select(Risk).where(Risk.id == risk_id))
+        risk = result.scalar_one_or_none()
+        if not risk:
+            result = await self.db.execute(
+                select(Risk).where(Risk.id.like(f"{risk_id}%")).limit(1)
+            )
+            risk = result.scalar_one_or_none()
+        if not risk:
+            return {"error": f"Risk not found: {risk_id}"}
+        return {
+            "pending_confirmation": True,
+            "tool": "apply_risk_treatment",
+            "description": f"Apply '{treatment}' treatment to risk: {_truncate(risk.scenario, 80)}",
+            "args": {"risk_id": risk.id, "treatment": treatment, "rationale": rationale},
+        }
+
+    async def _tool_trigger_vulnerability_scan(
+        self, asset_id: str | None = None, reason: str = ""
+    ) -> dict:
+        desc = f"vulnerability scan on asset {asset_id}" if asset_id else "vulnerability scan on all assets"
+        return {
+            "pending_confirmation": True,
+            "tool": "trigger_vulnerability_scan",
+            "description": f"Trigger {desc}",
+            "args": {"asset_id": asset_id, "reason": reason},
+        }
+
+    async def _tool_run_risk_analysis(
+        self, asset_id: str | None = None, reason: str = ""
+    ) -> dict:
+        desc = f"risk analysis on asset {asset_id}" if asset_id else "risk analysis on all assets"
+        return {
+            "pending_confirmation": True,
+            "tool": "run_risk_analysis",
+            "description": f"Run {desc}",
+            "args": {"asset_id": asset_id, "reason": reason},
+        }
+
+    async def _tool_generate_report(
+        self, report_type: str, title: str = ""
+    ) -> dict:
+        return {
+            "pending_confirmation": True,
+            "tool": "generate_report",
+            "description": f"Generate {report_type} report" + (f": {title}" if title else ""),
+            "args": {"report_type": report_type, "title": title},
+        }
+
+    async def _tool_create_note(
+        self, entity_type: str, entity_id: str, content: str
+    ) -> dict:
+        return {
+            "pending_confirmation": True,
+            "tool": "create_note",
+            "description": f"Create note on {entity_type} {entity_id[:8]}...",
+            "args": {"entity_type": entity_type, "entity_id": entity_id, "content": content},
+        }

@@ -39,6 +39,8 @@ class TreatmentRequest(BaseModel):
     treatment_owner: str | None = None
     treatment_due_date: date | None = None
     residual_risk_level: str | None = None
+    residual_likelihood: str | None = None
+    residual_impact: str | None = None
 
 
 class RiskResponse(BaseModel):
@@ -63,6 +65,8 @@ class RiskResponse(BaseModel):
     likelihood_factors: dict | None = None
     impact_factors: dict | None = None
     residual_risk_level: str | None = None
+    residual_likelihood: str | None = None
+    residual_impact: str | None = None
     status: str
     created_at: datetime
     updated_at: datetime

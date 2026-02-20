@@ -25,7 +25,12 @@ const columns = [
     header: 'Title',
     render: (f: EnrichedFinding) => (
       <div>
-        <p className="font-medium text-sm">{f.title}</p>
+        <p className="font-medium text-sm">
+          {f.title}
+          {f.asset?.ip_address && (
+            <span className="text-xs font-mono text-gray-400 ml-1.5">[{f.asset.ip_address}]</span>
+          )}
+        </p>
         <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 max-w-lg" title={f.description}>{f.description}</p>
       </div>
     ),

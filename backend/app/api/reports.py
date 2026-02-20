@@ -286,13 +286,12 @@ async def download_report(report_id: str, db: AsyncSession = Depends(get_db)):
         import base64
         try:
             pdf_bytes = base64.b64decode(content)
-        except Exception:
-            # Fallback: content might be raw HTML if weasyprint wasn't available
-            return HTMLResponse(content=content)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to decode PDF content: {str(e)}")
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=report_{report_id}.pdf"},
+            headers={"Content-Disposition": f'attachment; filename="risk_report_{report_id}.pdf"'},
         )
     elif report_type == "html":
         return HTMLResponse(content=content)

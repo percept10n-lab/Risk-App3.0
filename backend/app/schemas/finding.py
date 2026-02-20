@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any
 
 
@@ -31,6 +31,9 @@ class FindingUpdate(BaseModel):
     remediation: str | None = None
     exploitability_score: float | None = None
     status: str | None = None
+    owner: str | None = None
+    due_date: date | None = None
+    treatment_note: str | None = None
 
 
 class FindingResponse(BaseModel):
@@ -52,6 +55,9 @@ class FindingResponse(BaseModel):
     exploitability_score: float | None = None
     exploitability_rationale: dict | None = None
     status: str
+    owner: str | None = None
+    due_date: date | None = None
+    treatment_note: str | None = None
     dedupe_hash: str | None = None
     created_at: datetime
     updated_at: datetime

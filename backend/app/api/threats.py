@@ -186,6 +186,42 @@ class ZoneThreatRequest(BaseModel):
     run_id: str | None = None
 
 
+class EvaluateRequest(BaseModel):
+    asset_id: str | None = None
+    zone: str | None = None
+
+
+class AcceptBatchRequest(BaseModel):
+    threats: list[dict]
+
+
+@router.post("/evaluate")
+async def evaluate_threats(request: EvaluateRequest, db: AsyncSession = Depends(get_db)):
+    """Generate threat candidates for review without saving to DB."""
+    try:
+        service = ThreatService(db)
+        return await service.generate_for_review(
+            asset_id=request.asset_id,
+            zone=request.zone,
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Threat evaluation failed: {str(e)}")
+
+
+@router.post("/accept-batch")
+async def accept_threats_batch(request: AcceptBatchRequest, db: AsyncSession = Depends(get_db)):
+    """Accept reviewed threat candidates and save to DB."""
+    try:
+        service = ThreatService(db)
+        return await service.accept_batch(request.threats)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Batch accept failed: {str(e)}")
+
+
 @router.post("/generate")
 async def generate_threats(request: ThreatModelRequest, db: AsyncSession = Depends(get_db)):
     """Run threat modeling for one or all assets."""

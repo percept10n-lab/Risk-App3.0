@@ -11,8 +11,12 @@ import {
   Shield,
   FileText,
   Loader2,
+  AlertTriangle,
+  Lightbulb,
+  Link2,
 } from 'lucide-react'
 import api from '../../api/client'
+import { copilotApi } from '../../api/endpoints'
 
 interface QuickStats {
   total_assets: number
@@ -189,6 +193,11 @@ export default function CopilotHubPage() {
         <div className="xl:col-span-9">
           <CopilotPage embedded />
         </div>
+
+        {/* Proactive Insights */}
+        <div className="xl:col-span-12">
+          <InsightsPanel />
+        </div>
       </div>
     </div>
   )
@@ -206,6 +215,135 @@ function ScoreRow({ label, score, max }: { label: string; score: number; max: nu
         />
       </div>
       <span className="font-medium text-gray-600 w-10 text-right">{score}/{max}</span>
+    </div>
+  )
+}
+
+/* ── Proactive Insights Panel ── */
+
+interface InsightsData {
+  urgent_issues: Array<{ type: string; severity: string; title: string; id: string; detail: string }>
+  attack_chains: Array<{ asset_id: string; asset_name: string; zone: string; tactics: string[]; tactic_count: number; detail: string }>
+  recommendations: Array<{ type: string; priority: string; title: string; action: string }>
+}
+
+function InsightsPanel() {
+  const [insights, setInsights] = useState<InsightsData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    copilotApi.insights()
+      .then((res) => setInsights(res.data))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Lightbulb className="w-5 h-5 text-yellow-500" />
+          <h3 className="font-semibold">Proactive Insights</h3>
+        </div>
+        <div className="flex items-center justify-center py-6">
+          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+        </div>
+      </div>
+    )
+  }
+
+  if (!insights) return null
+
+  const hasContent =
+    insights.urgent_issues.length > 0 ||
+    insights.attack_chains.length > 0 ||
+    insights.recommendations.length > 0
+
+  if (!hasContent) return null
+
+  return (
+    <div className="card p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <Lightbulb className="w-5 h-5 text-yellow-500" />
+        <h3 className="font-semibold">Proactive Insights</h3>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Urgent Issues */}
+        {insights.urgent_issues.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <h4 className="text-sm font-semibold text-gray-700">Urgent Issues ({insights.urgent_issues.length})</h4>
+            </div>
+            <div className="space-y-2">
+              {insights.urgent_issues.slice(0, 5).map((issue) => (
+                <div key={issue.id} className="p-2.5 bg-red-50 border border-red-100 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                      issue.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
+                    }`}>
+                      {issue.severity}
+                    </span>
+                    <span className="text-xs text-gray-500 uppercase">{issue.type}</span>
+                  </div>
+                  <p className="text-sm text-gray-800 mt-1 line-clamp-2">{issue.title}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Attack Chains */}
+        {insights.attack_chains.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Link2 className="w-4 h-4 text-purple-500" />
+              <h4 className="text-sm font-semibold text-gray-700">Attack Chain Potential ({insights.attack_chains.length})</h4>
+            </div>
+            <div className="space-y-2">
+              {insights.attack_chains.map((chain) => (
+                <div key={chain.asset_id} className="p-2.5 bg-purple-50 border border-purple-100 rounded-lg">
+                  <p className="text-sm font-medium text-gray-800">{chain.asset_name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{chain.zone} zone</p>
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {chain.tactics.map((t) => (
+                      <span key={t} className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recommendations */}
+        {insights.recommendations.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <Lightbulb className="w-4 h-4 text-yellow-500" />
+              <h4 className="text-sm font-semibold text-gray-700">Recommendations ({insights.recommendations.length})</h4>
+            </div>
+            <div className="space-y-2">
+              {insights.recommendations.map((rec, i) => (
+                <div key={i} className="p-2.5 bg-yellow-50 border border-yellow-100 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                      rec.priority === 'high' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {rec.priority}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-800 mt-1">{rec.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{rec.action}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

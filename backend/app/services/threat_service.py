@@ -94,6 +94,48 @@ class ThreatService:
             "total_assets": len(assets),
         }
 
+    def _score_confidence(self, asset: Asset, threat_data: dict) -> float:
+        """Compute evidence-based confidence score for a threat candidate."""
+        score = 0.3  # base
+        exposure = asset.exposure or {}
+        threat_type = threat_data.get("threat_type", "")
+        title_lower = threat_data.get("title", "").lower()
+
+        # +0.3 if exposure data matches threat
+        exposure_matches = {
+            "ssh": ["ssh_exposed"],
+            "telnet": ["telnet_exposed"],
+            "ftp": ["ftp_exposed"],
+            "smb": ["smb_exposed"],
+            "upnp": ["upnp"],
+            "admin": ["admin_ui"],
+            "http": ["admin_ui"],
+            "dns": [],
+            "default": ["default_credentials"],
+            "credential": ["default_credentials"],
+        }
+        matched = False
+        for keyword, exp_keys in exposure_matches.items():
+            if keyword in title_lower:
+                for ek in exp_keys:
+                    if exposure.get(ek):
+                        matched = True
+                        break
+            if matched:
+                break
+        if matched:
+            score += 0.3
+
+        # +0.1 for high/critical asset criticality
+        if (asset.criticality or "").lower() in ("high", "critical"):
+            score += 0.1
+
+        # +0.1 for WAN/DMZ zone
+        if (asset.zone or "").lower() in ("wan", "dmz"):
+            score += 0.1
+
+        return min(score, 1.0)
+
     def _generate_threats_for_asset(self, asset: Asset) -> list[dict]:
         """Generate threats using rule-based logic."""
         try:
@@ -152,6 +194,8 @@ class ThreatService:
         if existing:
             return existing, False
 
+        confidence = self._score_confidence(asset, threat_data)
+
         threat = Threat(
             asset_id=asset.id,
             title=threat_data["title"],
@@ -160,7 +204,7 @@ class ThreatService:
             source=threat_data.get("source", "rule"),
             zone=threat_data.get("zone", asset.zone),
             trust_boundary=threat_data.get("trust_boundary"),
-            confidence=threat_data.get("confidence", 0.5),
+            confidence=confidence,
             rationale=threat_data.get("description", ""),
             c4_level=threat_data.get("c4_level"),
             stride_category_detail=threat_data.get("stride_category_detail"),
@@ -355,6 +399,136 @@ class ThreatService:
         self.db.add(threat)
         await self.db.flush()
         return threat, True
+
+    async def generate_for_review(
+        self, asset_id: str | None = None, zone: str | None = None
+    ) -> dict:
+        """Generate threat candidates WITHOUT saving to DB. Returns grouped by confidence tier."""
+        logger.info("Generating threats for review", asset_id=asset_id, zone=zone)
+
+        # Get target assets
+        if asset_id:
+            result = await self.db.execute(select(Asset).where(Asset.id == asset_id))
+            asset = result.scalar_one_or_none()
+            assets = [asset] if asset else []
+        elif zone:
+            result = await self.db.execute(select(Asset).where(Asset.zone == zone))
+            assets = list(result.scalars().all())
+        else:
+            result = await self.db.execute(select(Asset))
+            assets = list(result.scalars().all())
+
+        if not assets:
+            logger.info("No assets found for threat evaluation", asset_id=asset_id, zone=zone)
+            return {
+                "high": [], "medium": [], "low": [],
+                "total_candidates": 0, "total_assets": 0, "duplicates": 0,
+            }
+
+        candidates = []
+
+        for asset in assets:
+            try:
+                threats = self._generate_threats_for_asset(asset)
+                for threat_data in threats:
+                    confidence = self._score_confidence(asset, threat_data)
+
+                    # Check for duplicates
+                    dup_result = await self.db.execute(
+                        select(Threat).where(
+                            Threat.asset_id == asset.id,
+                            Threat.title == threat_data["title"],
+                        )
+                    )
+                    is_duplicate = dup_result.scalar_one_or_none() is not None
+
+                    candidates.append({
+                        "title": threat_data["title"],
+                        "description": threat_data.get("description", ""),
+                        "threat_type": threat_data.get("threat_type", "unknown"),
+                        "source": threat_data.get("source", "rule"),
+                        "zone": threat_data.get("zone", asset.zone),
+                        "trust_boundary": threat_data.get("trust_boundary"),
+                        "confidence": confidence,
+                        "c4_level": threat_data.get("c4_level"),
+                        "stride_category_detail": threat_data.get("stride_category_detail"),
+                        "asset_id": asset.id,
+                        "asset_ip": asset.ip_address,
+                        "asset_hostname": asset.hostname,
+                        "is_duplicate": is_duplicate,
+                    })
+            except Exception as e:
+                logger.error("Threat evaluation failed for asset", ip=asset.ip_address, error=str(e))
+
+        # Group by confidence tier
+        high = [c for c in candidates if c["confidence"] >= 0.7]
+        medium = [c for c in candidates if 0.4 <= c["confidence"] < 0.7]
+        low = [c for c in candidates if c["confidence"] < 0.4]
+
+        # Sort within tiers by confidence desc
+        high.sort(key=lambda x: x["confidence"], reverse=True)
+        medium.sort(key=lambda x: x["confidence"], reverse=True)
+        low.sort(key=lambda x: x["confidence"], reverse=True)
+
+        return {
+            "high": high,
+            "medium": medium,
+            "low": low,
+            "total_candidates": len(candidates),
+            "total_assets": len(assets),
+            "duplicates": sum(1 for c in candidates if c["is_duplicate"]),
+        }
+
+    async def accept_batch(self, threats_to_accept: list[dict]) -> dict:
+        """Accept reviewed threat candidates and save to DB."""
+        created = 0
+        skipped = 0
+
+        for threat_data in threats_to_accept:
+            asset_id = threat_data.get("asset_id")
+            if not asset_id:
+                skipped += 1
+                continue
+
+            # Check duplicate
+            result = await self.db.execute(
+                select(Threat).where(
+                    Threat.asset_id == asset_id,
+                    Threat.title == threat_data["title"],
+                )
+            )
+            if result.scalar_one_or_none():
+                skipped += 1
+                continue
+
+            threat = Threat(
+                asset_id=asset_id,
+                title=threat_data["title"],
+                description=threat_data.get("description", ""),
+                threat_type=threat_data.get("threat_type", "unknown"),
+                source=threat_data.get("source", "rule"),
+                zone=threat_data.get("zone"),
+                trust_boundary=threat_data.get("trust_boundary"),
+                confidence=threat_data.get("confidence", 0.5),
+                rationale=threat_data.get("description", ""),
+                c4_level=threat_data.get("c4_level"),
+                stride_category_detail=threat_data.get("stride_category_detail"),
+            )
+            self.db.add(threat)
+            created += 1
+
+        await self.db.flush()
+
+        await self.audit_trail.log(
+            event_type="threat_batch_accept",
+            entity_type="threat",
+            entity_id="batch",
+            actor="user",
+            action="accept_batch",
+            new_value={"created": created, "skipped": skipped},
+        )
+
+        return {"status": "completed", "created": created, "skipped": skipped}
 
     async def run_zone_threat_analysis(
         self, zone: str, run_id: str | None = None

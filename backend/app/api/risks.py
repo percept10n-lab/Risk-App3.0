@@ -103,26 +103,34 @@ async def get_risk_matrix(db: AsyncSession = Depends(get_db)):
     treatment_stats = await service.get_treatment_stats()
 
     # Build cell_risks: {likelihood}_{impact} -> list of risks in that cell
-    # Treated risks with residual_risk_level are shown in parentheses at their
-    # residual position and removed from the original cell
+    # Two views: inherent (original position) and residual (treated risks moved)
     all_risks_result = await db.execute(select(Risk))
     all_risks = list(all_risks_result.scalars().all())
 
-    cell_risks: dict[str, list] = {}
+    cell_risks: dict[str, list] = {}          # inherent view (original positions)
+    residual_cell_risks: dict[str, list] = {}  # residual view (treated risks moved)
     for r in all_risks:
         is_treated = r.status == "treated" and r.residual_risk_level is not None
-        key = f"{r.likelihood}_{r.impact}"
+        inherent_key = f"{r.likelihood}_{r.impact}"
         entry = {
             "id": r.id,
-            "risk_level": r.residual_risk_level if is_treated else r.risk_level,
+            "risk_level": r.risk_level,
+            "residual_risk_level": r.residual_risk_level if is_treated else None,
             "scenario": r.scenario[:100] if r.scenario else "",
             "status": r.status,
             "treated": is_treated,
             "original_risk_level": r.risk_level if is_treated else None,
         }
-        if key not in cell_risks:
-            cell_risks[key] = []
-        cell_risks[key].append(entry)
+
+        # Inherent view: always place in original cell
+        cell_risks.setdefault(inherent_key, []).append(entry)
+
+        # Residual view: treated risks go to residual cell, others stay in original
+        if is_treated and r.residual_likelihood and r.residual_impact:
+            residual_key = f"{r.residual_likelihood}_{r.residual_impact}"
+        else:
+            residual_key = inherent_key
+        residual_cell_risks.setdefault(residual_key, []).append(entry)
 
     thresholds = {
         "low": {"acceptable": True, "allowed_treatments": ["accept", "mitigate", "transfer", "avoid"], "requires_escalation": False, "max_days": None},
@@ -136,6 +144,7 @@ async def get_risk_matrix(db: AsyncSession = Depends(get_db)):
         "risk_distribution": stats,
         "treatment_distribution": treatment_stats,
         "cell_risks": cell_risks,
+        "residual_cell_risks": residual_cell_risks,
         "thresholds": thresholds,
     }
 
@@ -282,6 +291,16 @@ async def update_risk(risk_id: str, risk_in: RiskUpdate, db: AsyncSession = Depe
     return risk
 
 
+LIKELIHOOD_LEVELS = ["very_low", "low", "medium", "high", "very_high"]
+IMPACT_LEVELS = ["negligible", "low", "medium", "high", "critical"]
+
+
+def _reduce_level(levels: list[str], current: str) -> str:
+    """Reduce a level by one step (return the level one below current)."""
+    idx = levels.index(current) if current in levels else 0
+    return levels[max(0, idx - 1)]
+
+
 @router.post("/{risk_id}/treatment", response_model=RiskResponse)
 async def treat_risk(risk_id: str, treatment_in: TreatmentRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Risk).where(Risk.id == risk_id))
@@ -289,12 +308,40 @@ async def treat_risk(risk_id: str, treatment_in: TreatmentRequest, db: AsyncSess
     if not risk:
         raise HTTPException(status_code=404, detail="Risk not found")
 
+    # Status validation: only allow treatment from evaluated or later stages
+    valid_for_treatment = {"identified", "analyzed", "evaluated", "treated"}
+    if risk.status not in valid_for_treatment:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot apply treatment in status '{risk.status}'",
+        )
+
     for field, value in treatment_in.model_dump(exclude_unset=True).items():
         setattr(risk, field, value)
     risk.status = "treated"
-    # Update risk_level to residual if provided
-    if treatment_in.residual_risk_level:
-        risk.risk_level = treatment_in.residual_risk_level
+
+    # Calculate residual likelihood and impact based on treatment type if not explicitly provided
+    treatment_type = treatment_in.treatment
+    if not treatment_in.residual_likelihood:
+        if treatment_type == "mitigate":
+            risk.residual_likelihood = _reduce_level(LIKELIHOOD_LEVELS, risk.likelihood)
+        elif treatment_type == "avoid":
+            risk.residual_likelihood = LIKELIHOOD_LEVELS[0]  # very_low
+        elif treatment_type == "transfer":
+            risk.residual_likelihood = risk.likelihood  # unchanged
+        else:  # accept
+            risk.residual_likelihood = risk.likelihood
+    if not treatment_in.residual_impact:
+        if treatment_type == "transfer":
+            risk.residual_impact = _reduce_level(IMPACT_LEVELS, risk.impact)
+        elif treatment_type == "avoid":
+            risk.residual_impact = IMPACT_LEVELS[0]  # negligible
+        elif treatment_type == "mitigate":
+            risk.residual_impact = risk.impact  # unchanged
+        else:  # accept
+            risk.residual_impact = risk.impact
+
+    # Do NOT overwrite original risk_level — only set residual_risk_level
     risk.updated_at = datetime.utcnow()
 
     audit = AuditEvent(

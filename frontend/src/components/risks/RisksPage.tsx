@@ -52,6 +52,7 @@ export default function RisksPage() {
   const [matrixData, setMatrixData] = useState<any>(null)
   const [matrixLoading, setMatrixLoading] = useState(false)
   const [selectedCell, setSelectedCell] = useState<string | null>(null)
+  const [matrixView, setMatrixView] = useState<'inherent' | 'residual'>('inherent')
 
   // Analysis state
   const [analysisRunning, setAnalysisRunning] = useState(false)
@@ -488,7 +489,21 @@ export default function RisksPage() {
               <div className="card p-6 mb-4">
                 <div className="flex items-center gap-2 mb-4">
                   <span className="text-xs font-semibold text-gray-500 uppercase">Likelihood &uarr;</span>
-                  <span className="ml-auto text-xs font-semibold text-gray-500 uppercase">Impact &rarr;</span>
+                  <div className="flex items-center gap-1 ml-auto mr-4">
+                    <button
+                      onClick={() => setMatrixView('inherent')}
+                      className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${matrixView === 'inherent' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      Inherent Risk
+                    </button>
+                    <button
+                      onClick={() => setMatrixView('residual')}
+                      className={`px-3 py-1 text-xs rounded-lg font-medium transition-colors ${matrixView === 'residual' ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    >
+                      Residual Risk
+                    </button>
+                  </div>
+                  <span className="text-xs font-semibold text-gray-500 uppercase">Impact &rarr;</span>
                 </div>
                 <div className="grid gap-1" style={{ gridTemplateColumns: 'auto repeat(5, 1fr)', gridTemplateRows: 'auto repeat(5, 1fr)' }}>
                   {/* Header: empty corner */}
@@ -507,7 +522,8 @@ export default function RisksPage() {
                       </div>
                       {IMPACT_LABELS.map((imp) => {
                         const cellKey = `${lik}_${imp}`
-                        const cellRisks: any[] = matrixData.cell_risks?.[cellKey] || []
+                        const activeCellData = matrixView === 'residual' ? matrixData.residual_cell_risks : matrixData.cell_risks
+                        const cellRisks: any[] = activeCellData?.[cellKey] || []
                         const untreatedInCell = cellRisks.filter((r: any) => !r.treated)
                         const treatedInCell = cellRisks.filter((r: any) => r.treated)
                         // Determine cell risk level from matrix
@@ -550,16 +566,21 @@ export default function RisksPage() {
               </div>
 
               {/* Selected Cell Drill-Down */}
-              {selectedCell && matrixData.cell_risks?.[selectedCell] && (
+              {selectedCell && (() => {
+                const activeCellData = matrixView === 'residual' ? matrixData.residual_cell_risks : matrixData.cell_risks
+                const cellData = activeCellData?.[selectedCell]
+                return cellData ? true : false
+              })() && (
                 <div className="card mb-4">
                   <div className="px-4 py-3 border-b bg-gray-50">
                     <h3 className="text-sm font-semibold">
                       Risks in cell: {selectedCell.replace('_', ' \u2192 ').replace('_', ' / ')}
-                      <span className="ml-2 text-gray-500">({matrixData.cell_risks[selectedCell].length})</span>
+                      {matrixView === 'residual' && <span className="ml-2 text-xs text-brand-600">(residual view)</span>}
+                      <span className="ml-2 text-gray-500">({(matrixView === 'residual' ? matrixData.residual_cell_risks : matrixData.cell_risks)[selectedCell]?.length ?? 0})</span>
                     </h3>
                   </div>
                   <div className="divide-y">
-                    {matrixData.cell_risks[selectedCell].map((r: any) => (
+                    {((matrixView === 'residual' ? matrixData.residual_cell_risks : matrixData.cell_risks)[selectedCell] || []).map((r: any) => (
                       <div key={r.id} className="px-4 py-2 flex items-center gap-3">
                         <Badge variant={r.risk_level as any}>{r.risk_level}</Badge>
                         <span className="text-sm flex-1 line-clamp-2" title={r.scenario}>{r.scenario}</span>
