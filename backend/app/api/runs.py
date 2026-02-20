@@ -80,7 +80,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
         "discovery": 90,
         "fingerprinting": 90,
         "threat_modeling": 60,
-        "vuln_scanning": 90,
+        "vuln_scanning": 120,
         "exploit_analysis": 30,
         "mitre_mapping": 30,
         "risk_analysis": 30,
@@ -138,7 +138,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
             logger.info("Pipeline step: vuln_scanning", run_id=run_id)
             vuln_svc = VulnScanService(db)
             vs_result = await _run_step_with_timeout(
-                vuln_svc.run_vuln_scan(run_id=run_id, timeout=60),
+                vuln_svc.run_vuln_scan(run_id=run_id, timeout=100),
                 "vuln_scanning", STEP_TIMEOUTS["vuln_scanning"], run_id=run_id,
             )
             await db.commit()

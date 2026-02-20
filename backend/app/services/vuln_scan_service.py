@@ -42,22 +42,61 @@ class VulnScanService:
             result = await self.db.execute(select(Asset))
             assets = list(result.scalars().all())
 
+        # Phase 1: Batch reachability check (all assets concurrently)
+        reachability = {}
+        if assets:
+            reach_tasks = [self._check_reachable(a.ip_address) for a in assets]
+            reach_results = await asyncio.gather(*reach_tasks, return_exceptions=True)
+            for asset_obj, reach in zip(assets, reach_results):
+                reachability[asset_obj.id] = reach if isinstance(reach, bool) else False
+            reachable_count = sum(1 for v in reachability.values() if v)
+            logger.info("Reachability check done", total=len(assets), reachable=reachable_count)
+
+        # Phase 2: Run network checks concurrently (semaphore limits parallelism)
+        sem = asyncio.Semaphore(10)
         total_created = 0
         total_duplicate = 0
         total_errors = 0
         all_findings = []
 
-        for asset in assets:
-            try:
-                findings, created, duplicate = await self._scan_asset(
-                    asset, run_id, timeout // max(len(assets), 1)
-                )
-                total_created += created
-                total_duplicate += duplicate
-                all_findings.extend(findings)
-            except Exception as e:
-                logger.error("Vuln scan failed for asset", ip=asset.ip_address, error=str(e))
+        async def _check_one(asset_obj):
+            async with sem:
+                return await self._collect_raw_findings(asset_obj, reachability.get(asset_obj.id, False))
+
+        check_tasks = [_check_one(a) for a in assets]
+        check_results = await asyncio.gather(*check_tasks, return_exceptions=True)
+
+        # Phase 3: Insert findings into DB sequentially (shared session)
+        for asset_obj, result in zip(assets, check_results):
+            if isinstance(result, Exception):
+                logger.error("Vuln scan failed for asset", ip=asset_obj.ip_address, error=str(result))
                 total_errors += 1
+                continue
+            raw_findings = result
+            for raw in raw_findings:
+                if raw.get("severity") == "info":
+                    continue
+                finding_data = {
+                    "asset_id": asset_obj.id,
+                    "run_id": run_id,
+                    "title": raw["title"],
+                    "description": raw.get("description", ""),
+                    "severity": raw.get("severity", "info"),
+                    "category": raw.get("category", "info"),
+                    "source_tool": raw.get("source_tool", "vuln_scan"),
+                    "source_check": raw.get("source_check", raw.get("source_tool", "vuln_scan")),
+                    "cve_ids": raw.get("cve_ids", []),
+                    "cwe_id": raw.get("cwe_id"),
+                    "evidence_artifact_ids": [],
+                    "raw_output_snippet": raw.get("evidence", ""),
+                    "remediation": raw.get("remediation"),
+                }
+                finding, is_new = await self.finding_service.create_deduplicated(finding_data)
+                all_findings.append(finding)
+                if is_new:
+                    total_created += 1
+                else:
+                    total_duplicate += 1
 
         # Store artifact
         summary = {
@@ -95,21 +134,15 @@ class VulnScanService:
             "total_assets": len(assets),
         }
 
-    async def _scan_asset(
-        self, asset: Asset, run_id: str | None, timeout: int
-    ) -> tuple[list[Finding], int, int]:
-        """Scan a single asset using all relevant checks."""
+    async def _collect_raw_findings(self, asset: Asset, network_reachable: bool = False) -> list[dict]:
+        """Run network checks on a single asset and return raw findings (no DB writes)."""
         target = asset.ip_address
         exposure = asset.exposure or {}
         raw_findings = []
 
         open_ports = self._get_open_ports(exposure)
 
-        # Try real network checks first
-        network_reachable = await self._check_reachable(target)
-
         if network_reachable:
-            # Build list of all checks to run concurrently
             check_tasks = []
             check_labels = []
 
@@ -150,7 +183,6 @@ class VulnScanService:
                 check_tasks.append(asyncio.wait_for(self._run_mqtt_check(target, port), timeout=10))
                 check_labels.append(f"MQTT:{port}")
 
-            # Run all checks concurrently
             results = await asyncio.gather(*check_tasks, return_exceptions=True)
 
             for label, result in zip(check_labels, results):
@@ -159,43 +191,9 @@ class VulnScanService:
                 elif isinstance(result, list):
                     raw_findings.extend(result)
         else:
-            # Network not reachable - generate simulated findings from exposure profile
-            logger.info("Target not reachable, generating simulated findings", target=target)
             raw_findings = self._generate_simulated_findings(asset)
 
-        # Create deduplicated findings in DB
-        created = 0
-        duplicate = 0
-        db_findings = []
-
-        for raw in raw_findings:
-            if raw.get("severity") == "info":
-                continue  # Skip pure info findings from DB storage
-
-            finding_data = {
-                "asset_id": asset.id,
-                "run_id": run_id,
-                "title": raw["title"],
-                "description": raw.get("description", ""),
-                "severity": raw.get("severity", "info"),
-                "category": raw.get("category", "info"),
-                "source_tool": raw.get("source_tool", "vuln_scan"),
-                "source_check": raw.get("source_check", raw.get("source_tool", "vuln_scan")),
-                "cve_ids": raw.get("cve_ids", []),
-                "cwe_id": raw.get("cwe_id"),
-                "evidence_artifact_ids": [],
-                "raw_output_snippet": raw.get("evidence", ""),
-                "remediation": raw.get("remediation"),
-            }
-
-            finding, is_new = await self.finding_service.create_deduplicated(finding_data)
-            db_findings.append(finding)
-            if is_new:
-                created += 1
-            else:
-                duplicate += 1
-
-        return db_findings, created, duplicate
+        return raw_findings
 
     def _get_open_ports(self, exposure: dict) -> list[int]:
         """Derive open ports from exposure indicators."""
