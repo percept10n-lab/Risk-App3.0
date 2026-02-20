@@ -82,13 +82,19 @@ export default function ReportsPage() {
     setReports((prev) => [...prev.filter((r) => r.type !== type), { type, status: 'generating' }])
     try {
       const res = await reportsApi.generate({ report_type: type })
-      const reportId = res.data?.report_id || res.data?.id
-      setReports((prev) =>
-        prev.map((r) => (r.type === type ? { ...r, status: 'done', reportId } : r))
-      )
+      if (res.data?.status === 'error') {
+        setReports((prev) =>
+          prev.map((r) => (r.type === type ? { ...r, status: 'error', error: res.data.error || 'Generation failed' } : r))
+        )
+      } else {
+        const reportId = res.data?.report_id || res.data?.id
+        setReports((prev) =>
+          prev.map((r) => (r.type === type ? { ...r, status: 'done', reportId } : r))
+        )
+      }
     } catch (err: any) {
       setReports((prev) =>
-        prev.map((r) => (r.type === type ? { ...r, status: 'error', error: err.message } : r))
+        prev.map((r) => (r.type === type ? { ...r, status: 'error', error: err.response?.data?.detail || err.message } : r))
       )
     }
     setGenerating(null)

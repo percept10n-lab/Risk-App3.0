@@ -4,8 +4,30 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.services.copilot_service import CopilotService
+from app.services.security_agent import SecurityAgent
+
+import structlog
+
+logger = structlog.get_logger()
 
 router = APIRouter()
+
+
+class ChatRequest(BaseModel):
+    message: str
+    conversation: list[dict] = []
+
+
+@router.post("/chat")
+async def agent_chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """Chat with the AI Security Specialist agent."""
+    try:
+        agent = SecurityAgent(db)
+        response = await agent.chat(request.message, request.conversation)
+        return response
+    except Exception as e:
+        logger.error("Agent chat failed", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
 
 
 class TriageRequest(BaseModel):
@@ -41,10 +63,14 @@ class VerifyRequest(BaseModel):
 @router.post("/triage")
 async def triage_findings(request: TriageRequest, db: AsyncSession = Depends(get_db)):
     """AI-assisted triage of findings by priority."""
-    service = CopilotService(db)
-    return await service.triage_findings(
-        finding_ids=request.finding_ids if request.finding_ids else None
-    )
+    try:
+        service = CopilotService(db)
+        return await service.triage_findings(
+            finding_ids=request.finding_ids if request.finding_ids else None
+        )
+    except Exception as e:
+        logger.error("Triage endpoint failed", error=str(e), exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Triage failed: {str(e)}")
 
 
 @router.post("/remediation")
@@ -92,6 +118,20 @@ async def investigate_finding(request: InvestigateRequest, db: AsyncSession = De
     """Step 1: Investigate a finding — gather full context, analysis, and remediation plan."""
     service = CopilotService(db)
     result = await service.investigate(request.finding_id)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+class GatherRequest(BaseModel):
+    finding_id: str
+
+
+@router.post("/gather")
+async def gather_updates(request: GatherRequest, db: AsyncSession = Depends(get_db)):
+    """Step 3.1: Gather patches, updates, and check admin requirements."""
+    service = CopilotService(db)
+    result = await service.gather(request.finding_id)
     if result.get("status") == "error":
         raise HTTPException(status_code=404, detail=result["error"])
     return result

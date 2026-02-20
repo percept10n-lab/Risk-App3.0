@@ -47,6 +47,10 @@ async def generate_report(request: ReportGenerateRequest, db: AsyncSession = Dep
             status_code=504,
             detail=f"Report generation timed out after {REPORT_TIMEOUT_SECONDS}s",
         )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 
 
 async def _build_report(request: ReportGenerateRequest, db: AsyncSession):
@@ -190,7 +194,39 @@ async def _build_report(request: ReportGenerateRequest, db: AsyncSession):
             "status": "completed",
         }
 
-    return {"status": "error", "error": f"Unknown report type: {request.report_type}"}
+    elif request.report_type == "pdf":
+        try:
+            from mcp_servers.reporting.pdf_report import PDFReportGenerator
+        except ImportError:
+            import sys
+            from pathlib import Path
+            project_root = str(Path(__file__).resolve().parents[3])
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+            from mcp_servers.reporting.pdf_report import PDFReportGenerator
+
+        generator = PDFReportGenerator()
+        b64_content, fmt = generator.generate_base64(report_data)
+
+        await artifact_store.store(
+            content=b64_content,
+            artifact_type="report",
+            tool_name="report_generator",
+            target="full_report",
+            run_id=request.run_id,
+            command="generate_report type=pdf",
+            parameters={"report_type": fmt, "report_id": report_id},
+        )
+
+        return {
+            "report_id": report_id,
+            "report_type": fmt,
+            "status": "completed",
+            "summary": summary,
+            "note": "PDF generated as HTML fallback" if fmt == "html" else None,
+        }
+
+    raise HTTPException(status_code=400, detail=f"Unknown report type: {request.report_type}")
 
 
 @router.get("/{report_id}")
@@ -246,7 +282,19 @@ async def download_report(report_id: str, db: AsyncSession = Depends(get_db)):
     else:
         raise HTTPException(status_code=404, detail="Report content not available")
 
-    if report_type == "html":
+    if report_type == "pdf":
+        import base64
+        try:
+            pdf_bytes = base64.b64decode(content)
+        except Exception:
+            # Fallback: content might be raw HTML if weasyprint wasn't available
+            return HTMLResponse(content=content)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=report_{report_id}.pdf"},
+        )
+    elif report_type == "html":
         return HTMLResponse(content=content)
     elif report_type == "csv":
         return Response(

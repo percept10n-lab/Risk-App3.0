@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import PageHeader from '../common/PageHeader'
 import Badge from '../common/Badge'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Shield, ExternalLink } from 'lucide-react'
 import api from '../../api/client'
+import { intelApi } from '../../api/endpoints'
 
 interface FindingContext {
   finding: {
@@ -146,6 +147,11 @@ export default function FindingDetailPage() {
           </div>
         )}
 
+        {/* Threat Intelligence */}
+        {finding.cve_ids && finding.cve_ids.length > 0 && (
+          <ThreatIntelCard cveIds={finding.cve_ids} />
+        )}
+
         {/* Evidence */}
         {finding.raw_output_snippet && (
           <div className="card p-6 lg:col-span-2">
@@ -190,6 +196,119 @@ export default function FindingDetailPage() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+
+function ThreatIntelCard({ cveIds }: { cveIds: string[] }) {
+  const [intelData, setIntelData] = useState<Record<string, any>>({})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchIntel = async () => {
+      const results: Record<string, any> = {}
+      for (const cveId of cveIds.slice(0, 5)) {
+        try {
+          const res = await intelApi.lookupCve(cveId)
+          results[cveId] = res.data
+        } catch {
+          results[cveId] = null
+        }
+      }
+      setIntelData(results)
+      setLoading(false)
+    }
+    fetchIntel()
+  }, [cveIds.join(',')])
+
+  if (loading) {
+    return (
+      <div className="card p-6">
+        <h3 className="font-semibold mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Threat Intelligence</h3>
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          <Loader2 className="w-4 h-4 animate-spin" /> Loading live threat data...
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="card p-6">
+      <h3 className="font-semibold mb-3 flex items-center gap-2"><Shield className="w-4 h-4" /> Threat Intelligence</h3>
+      <div className="space-y-4">
+        {Object.entries(intelData).map(([cveId, data]) => {
+          if (!data) return (
+            <div key={cveId} className="text-sm text-gray-500">{cveId}: No data available</div>
+          )
+          return (
+            <div key={cveId} className="border border-gray-200 rounded-lg p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="font-mono font-medium text-sm">{cveId}</span>
+                {data.in_kev && (
+                  <span className="px-2 py-0.5 bg-red-100 text-red-800 rounded text-xs font-medium">In CISA KEV</span>
+                )}
+                {!data.in_kev && (
+                  <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs font-medium">Not in KEV</span>
+                )}
+              </div>
+
+              {/* EPSS Score */}
+              {data.epss && (
+                <div className="mb-2">
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span>EPSS Score</span>
+                    <span>{(data.epss.epss_score * 100).toFixed(1)}% (P{data.epss.percentile?.toFixed(0)})</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className={`h-full rounded-full ${
+                        data.epss.epss_score >= 0.7 ? 'bg-red-500' :
+                        data.epss.epss_score >= 0.3 ? 'bg-yellow-500' : 'bg-green-500'
+                      }`}
+                      style={{ width: `${data.epss.epss_score * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* CVSS from cvefeed.io */}
+              {data.nvd?.cvss_v31_score != null && (
+                <div className="flex items-center gap-2 text-sm mb-1">
+                  <span className="text-gray-500">CVSS v3.1:</span>
+                  <span className={`font-bold ${
+                    data.nvd.cvss_v31_score >= 9 ? 'text-red-600' :
+                    data.nvd.cvss_v31_score >= 7 ? 'text-orange-600' :
+                    data.nvd.cvss_v31_score >= 4 ? 'text-yellow-600' : 'text-green-600'
+                  }`}>
+                    {data.nvd.cvss_v31_score}
+                  </span>
+                  {data.nvd.cvss_v31_severity && (
+                    <span className="text-xs text-gray-500">({data.nvd.cvss_v31_severity})</span>
+                  )}
+                </div>
+              )}
+
+              {/* KEV Details */}
+              {data.kev && (
+                <div className="text-xs text-gray-600 mt-1">
+                  <span className="font-medium">Required Action:</span> {data.kev.required_action}
+                </div>
+              )}
+
+              {/* CVEFeed link */}
+              <a
+                href={`https://cvefeed.io/vuln/detail/${cveId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 mt-1"
+              >
+                View on CVEFeed.io <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

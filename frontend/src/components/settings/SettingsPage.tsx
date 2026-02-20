@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import PageHeader from '../common/PageHeader'
-import { Settings, Shield, Bot, Gauge, CheckCircle2, XCircle, Loader2, Clock, Plus, Play, Trash2 } from 'lucide-react'
-import { settingsApi, schedulesApi } from '../../api/endpoints'
+import { Settings, Shield, Bot, Gauge, CheckCircle2, XCircle, Loader2, Clock, Plus, Play, Trash2, Radio } from 'lucide-react'
+import { settingsApi, schedulesApi, intelApi } from '../../api/endpoints'
 import { formatDate } from '../../utils/format'
 import type { ScanSchedule } from '../../types'
 
-const TABS = ['policy', 'ai', 'thresholds', 'schedules'] as const
+const TABS = ['policy', 'ai', 'thresholds', 'schedules', 'intel'] as const
 type Tab = typeof TABS[number]
 const TAB_LABELS: Record<Tab, { label: string; icon: any }> = {
   policy: { label: 'Scan Policy', icon: Shield },
   ai: { label: 'AI Configuration', icon: Bot },
   thresholds: { label: 'Evaluation Thresholds', icon: Gauge },
   schedules: { label: 'Schedules', icon: Clock },
+  intel: { label: 'Threat Intel', icon: Radio },
 }
 
 interface EvalThresholds {
@@ -684,6 +685,9 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Tab 5: Threat Intelligence */}
+      {tab === 'intel' && <ThreatIntelSettings flash={flash} />}
+
       {/* Schedule Create/Edit Modal */}
       {scheduleModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
@@ -808,6 +812,213 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+function ThreatIntelSettings({ flash }: { flash: (msg: string) => void }) {
+  const [feedMode, setFeedMode] = useState('fallback')
+  const [abuseipdbKey, setAbuseipdbKey] = useState('')
+  const [greynoiseKey, setGreynoiseKey] = useState('')
+  const [otxKey, setOtxKey] = useState('')
+  const [cacheTtl, setCacheTtl] = useState(3600)
+  const [feedStatus, setFeedStatus] = useState<any>(null)
+  const [loadingStatus, setLoadingStatus] = useState(false)
+
+  async function checkFeedStatus() {
+    setLoadingStatus(true)
+    try {
+      const res = await intelApi.feedStatus()
+      setFeedStatus(res.data)
+    } catch (err: any) {
+      console.error('Feed status check failed:', err.message)
+    }
+    setLoadingStatus(false)
+  }
+
+  useEffect(() => {
+    checkFeedStatus()
+  }, [])
+
+  function handleSave() {
+    // Store intel settings in localStorage (to be synced to backend .env later)
+    const settings = {
+      feed_mode: feedMode,
+      abuseipdb_api_key: abuseipdbKey,
+      greynoise_api_key: greynoiseKey,
+      alienvault_otx_api_key: otxKey,
+      cache_ttl: cacheTtl,
+    }
+    localStorage.setItem('risk_intel_settings', JSON.stringify(settings))
+    flash('Threat Intel settings saved locally')
+  }
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('risk_intel_settings')
+      if (stored) {
+        const s = JSON.parse(stored)
+        if (s.feed_mode) setFeedMode(s.feed_mode)
+        if (s.abuseipdb_api_key) setAbuseipdbKey(s.abuseipdb_api_key)
+        if (s.greynoise_api_key) setGreynoiseKey(s.greynoise_api_key)
+        if (s.alienvault_otx_api_key) setOtxKey(s.alienvault_otx_api_key)
+        if (s.cache_ttl) setCacheTtl(s.cache_ttl)
+      }
+    } catch {}
+  }, [])
+
+  return (
+    <div className="space-y-6">
+      <div className="card p-6 space-y-5">
+        <h3 className="font-semibold text-lg">Threat Intelligence Feeds</h3>
+        <p className="text-xs text-gray-400">
+          Configure live threat intelligence feeds. Free sources (CISA KEV, EPSS, cvefeed.io, abuse.ch, crt.sh) work without API keys.
+          API-key sources (AbuseIPDB, GreyNoise, OTX) require registration.
+        </p>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Feed Mode</label>
+          <select
+            value={feedMode}
+            onChange={(e) => setFeedMode(e.target.value)}
+            className="px-3 py-2 border rounded-lg text-sm"
+          >
+            <option value="fallback">Fallback (try live, fall back to static)</option>
+            <option value="live">Live (always fetch from upstream)</option>
+            <option value="offline">Offline (static snapshots only)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Cache TTL (seconds)</label>
+          <input
+            type="number"
+            value={cacheTtl}
+            onChange={(e) => setCacheTtl(Number(e.target.value))}
+            className="w-48 px-3 py-2 border rounded-lg text-sm"
+            min={60}
+            max={86400}
+          />
+          <p className="text-xs text-gray-400 mt-1">How long to cache feed data before refreshing (default: 3600 = 1 hour)</p>
+        </div>
+      </div>
+
+      <div className="card p-6 space-y-5">
+        <h3 className="font-semibold text-lg">API Keys</h3>
+        <p className="text-xs text-gray-400">
+          These keys enable additional IP reputation and IoC lookup sources. Leave blank to skip that source.
+        </p>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">AbuseIPDB API Key</label>
+          <input
+            type="password"
+            value={abuseipdbKey}
+            onChange={(e) => setAbuseipdbKey(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+            placeholder="Enter AbuseIPDB API key..."
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Free tier: 1000 checks/day. Register at abuseipdb.com
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">GreyNoise API Key</label>
+          <input
+            type="password"
+            value={greynoiseKey}
+            onChange={(e) => setGreynoiseKey(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+            placeholder="Enter GreyNoise API key..."
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Community tier: free. Register at greynoise.io
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">AlienVault OTX API Key</label>
+          <input
+            type="password"
+            value={otxKey}
+            onChange={(e) => setOtxKey(e.target.value)}
+            className="w-full px-3 py-2 border rounded-lg text-sm font-mono"
+            placeholder="Enter OTX API key..."
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Free. Register at otx.alienvault.com
+          </p>
+        </div>
+
+        <button onClick={handleSave} className="btn-primary">
+          Save Intel Settings
+        </button>
+      </div>
+
+      {/* Feed Status Dashboard */}
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-lg">Feed Status</h3>
+          <button
+            onClick={checkFeedStatus}
+            disabled={loadingStatus}
+            className="btn-secondary text-sm flex items-center gap-2"
+          >
+            {loadingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radio className="w-4 h-4" />}
+            Refresh
+          </button>
+        </div>
+        {feedStatus ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <p className="text-2xl font-bold">{feedStatus.kev_count}</p>
+                <p className="text-xs text-gray-500">KEV Entries</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <p className="text-2xl font-bold">{feedStatus.epss_count}</p>
+                <p className="text-xs text-gray-500">EPSS Entries</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <p className="text-2xl font-bold">{feedStatus.cve_cached ?? feedStatus.nvd_cached ?? 0}</p>
+                <p className="text-xs text-gray-500">CVE Cached</p>
+              </div>
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <p className="text-lg font-bold capitalize">{feedStatus.mode}</p>
+                <p className="text-xs text-gray-500">Mode</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-700 mb-1">Free Sources</p>
+              <div className="flex flex-wrap gap-1">
+                {(feedStatus.free_sources || []).map((s: string) => (
+                  <span key={s} className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs">{s}</span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-700 mb-1">API-Key Sources</p>
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(feedStatus.api_sources || {}).map(([name, configured]: [string, any]) => (
+                  <span
+                    key={name}
+                    className={`px-2 py-0.5 rounded text-xs flex items-center gap-1 ${
+                      configured ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                    }`}
+                  >
+                    {configured ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Click Refresh to check feed status</p>
+        )}
+      </div>
     </div>
   )
 }

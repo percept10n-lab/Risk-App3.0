@@ -268,7 +268,7 @@ _REMEDIATION_KB: list[dict] = [
         ],
         "difficulty": "moderate",
         "references": [
-            "https://nvd.nist.gov/",
+            "https://cvefeed.io/",
             "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
         ],
         "verification": "Verify the new version: check with version command, banner, or re-scan with vulnerability scanner.",
@@ -774,7 +774,7 @@ class RemediationAdvisor:
             "steps": steps,
             "difficulty": difficulty,
             "references": [
-                "https://nvd.nist.gov/",
+                "https://cvefeed.io/",
                 "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
                 "https://owasp.org/",
             ],

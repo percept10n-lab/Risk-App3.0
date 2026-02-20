@@ -136,6 +136,298 @@ class CopilotService:
             "asset_context": asset_context,
         }
 
+    # ─── Gather (Step 3.1) ──────────────────────────────────────
+
+    async def gather(self, finding_id: str) -> dict:
+        """Step 3.1: Gather patches, updates, and check admin requirements."""
+        result = await self.db.execute(select(Finding).where(Finding.id == finding_id))
+        finding = result.scalar_one_or_none()
+        if not finding:
+            return {"status": "error", "error": "Finding not found"}
+
+        asset = None
+        if finding.asset_id:
+            a_res = await self.db.execute(select(Asset).where(Asset.id == finding.asset_id))
+            asset = a_res.scalar_one_or_none()
+
+        # Build remediation plan to inform admin-check
+        plan = self._build_remediation_plan(finding, asset, {})
+
+        updates = self._discover_updates(finding, asset)
+        admin_required, admin_actions, admin_explanation = self._check_admin_requirements(
+            finding, asset, plan.get("steps", [])
+        )
+
+        # Build summary
+        update_count = len(updates)
+        update_types = set(u["type"] for u in updates)
+        type_labels = {
+            "software_update": "software update(s)",
+            "firmware_update": "firmware update(s)",
+            "config_change": "configuration change(s)",
+        }
+        parts = []
+        for t in ("software_update", "firmware_update", "config_change"):
+            count = sum(1 for u in updates if u["type"] == t)
+            if count:
+                parts.append(f"{count} {type_labels[t]}")
+        summary = ", ".join(parts) if parts else "No updates identified"
+        if admin_required:
+            summary += ". Admin access required."
+        else:
+            summary += ". No admin access required."
+
+        await self.audit_trail.log(
+            event_type="ai_suggestion", entity_type="finding",
+            entity_id=finding_id, actor="ai_copilot",
+            action="gather",
+            new_value={
+                "update_count": update_count,
+                "admin_required": admin_required,
+            },
+        )
+
+        return {
+            "finding_id": finding_id,
+            "asset": {
+                "ip": asset.ip_address if asset else None,
+                "hostname": asset.hostname if asset else None,
+                "vendor": asset.vendor if asset else None,
+                "os_guess": asset.os_guess if asset else None,
+                "asset_type": asset.asset_type if asset else None,
+            } if asset else None,
+            "updates": updates,
+            "admin_required": admin_required,
+            "admin_actions": admin_actions,
+            "admin_explanation": admin_explanation,
+            "summary": summary,
+        }
+
+    def _discover_updates(self, finding: Finding, asset) -> list[dict]:
+        """Rule-based patch/update lookup based on finding + asset context."""
+        updates = []
+        title_lower = finding.title.lower() if finding.title else ""
+        source_check = (finding.source_check or "").lower()
+        source_tool = (finding.source_tool or "").lower()
+        category = (finding.category or "").lower()
+        raw_output = (finding.raw_output_snippet or "").lower()
+        vendor = (asset.vendor or "").lower() if asset else ""
+        asset_type = (asset.asset_type or "").lower() if asset else ""
+        os_guess = (asset.os_guess or "").lower() if asset else ""
+
+        # SSH findings
+        if "ssh" in title_lower or "ssh" in source_check or "ssh" in source_tool:
+            updates.append({
+                "name": "OpenSSH Update",
+                "type": "software_update",
+                "description": "Upgrade OpenSSH to the latest stable version to resolve weak algorithms, deprecated ciphers, or known vulnerabilities",
+                "vendor_url": "https://www.openssh.com/releasenotes.html",
+                "integrity": "Verify GPG signature with the OpenBSD signing key. Downloads should be over HTTPS only.",
+                "priority": "high" if finding.severity in ("critical", "high") else "medium",
+            })
+            updates.append({
+                "name": "SSH Daemon Configuration Hardening",
+                "type": "config_change",
+                "description": "Update sshd_config to disable weak key exchange algorithms, ciphers, and MACs. Restrict authentication methods.",
+                "vendor_url": "https://man.openbsd.org/sshd_config",
+                "integrity": "N/A — configuration change, no download required",
+                "priority": "high" if finding.severity in ("critical", "high") else "medium",
+            })
+
+        # TLS / SSL findings
+        elif "tls" in title_lower or "ssl" in title_lower or "certificate" in title_lower or "tls" in source_check:
+            updates.append({
+                "name": "OpenSSL / LibreSSL Update",
+                "type": "software_update",
+                "description": "Upgrade the TLS library to the latest version to resolve protocol weaknesses or deprecated cipher suites",
+                "vendor_url": "https://www.openssl.org/source/",
+                "integrity": "Verify SHA256 checksum and GPG signature from openssl.org. Downloads must be over HTTPS.",
+                "priority": "high" if finding.severity in ("critical", "high") else "medium",
+            })
+            # Check if it's a web-server config issue
+            if "cipher" in title_lower or "protocol" in title_lower or "header" in source_check:
+                updates.append({
+                    "name": "Web Server TLS Configuration",
+                    "type": "config_change",
+                    "description": "Update web server configuration to enforce TLS 1.2+ and strong cipher suites",
+                    "vendor_url": "https://ssl-config.mozilla.org/",
+                    "integrity": "N/A — configuration change, no download required",
+                    "priority": "high",
+                })
+
+        # HTTP header findings
+        elif "header" in title_lower or "http" in source_check or "header" in source_check:
+            updates.append({
+                "name": "HTTP Security Headers Configuration",
+                "type": "config_change",
+                "description": "Add or update security headers (HSTS, X-Content-Type-Options, X-Frame-Options, CSP, etc.) in the web server configuration",
+                "vendor_url": "https://owasp.org/www-project-secure-headers/",
+                "integrity": "N/A — configuration change, no download required",
+                "priority": "medium" if finding.severity in ("medium", "low", "info") else "high",
+            })
+
+        # Default credential findings
+        elif "default" in title_lower and ("credential" in title_lower or "password" in title_lower):
+            updates.append({
+                "name": "Credential Change",
+                "type": "config_change",
+                "description": "Change default credentials to strong, unique passwords. Enable multi-factor authentication if supported.",
+                "vendor_url": "",
+                "integrity": "N/A — credential change, no download required",
+                "priority": "critical",
+            })
+
+        # DNS findings
+        elif "dns" in title_lower or "dns" in source_check:
+            updates.append({
+                "name": "DNS Server Update / Configuration",
+                "type": "config_change",
+                "description": "Update DNS server configuration to disable zone transfers, enable DNSSEC, and restrict recursive queries",
+                "vendor_url": "https://www.isc.org/bind/",
+                "integrity": "Verify package signature from distribution repository or ISC directly",
+                "priority": "medium",
+            })
+
+        # Firmware / Router / IoT
+        elif asset_type in ("router", "iot", "appliance", "switch", "access_point") or "firmware" in title_lower:
+            vendor_url = ""
+            if "fritz" in vendor:
+                vendor_url = "https://fritz.box"
+            elif "meross" in vendor:
+                vendor_url = "https://www.meross.com/support"
+            elif "ubiquiti" in vendor or "unifi" in vendor:
+                vendor_url = "https://ui.com/download"
+            elif "mikrotik" in vendor:
+                vendor_url = "https://mikrotik.com/download"
+            elif vendor:
+                vendor_url = f"Check {asset.vendor} support portal for firmware updates"
+            else:
+                vendor_url = "Check device vendor support portal for firmware updates"
+
+            updates.append({
+                "name": "Firmware Update",
+                "type": "firmware_update",
+                "description": f"Check for and apply the latest firmware update from the device vendor to address known vulnerabilities",
+                "vendor_url": vendor_url,
+                "integrity": "Verify firmware checksum against vendor-published SHA256 hash. Download only from official vendor portal over HTTPS.",
+                "priority": "high" if finding.severity in ("critical", "high") else "medium",
+            })
+
+        # CVE-based findings (generic)
+        elif finding.cve_ids and len(finding.cve_ids) > 0:
+            cve_list = ", ".join(finding.cve_ids[:5])
+            updates.append({
+                "name": "Vendor Patch for " + (finding.cve_ids[0] if finding.cve_ids else "known CVEs"),
+                "type": "software_update",
+                "description": f"Apply vendor-issued patches addressing: {cve_list}. Consult the vendor advisory for specific update instructions.",
+                "vendor_url": f"https://cvefeed.io/vuln/detail/{finding.cve_ids[0]}" if finding.cve_ids else "",
+                "integrity": "Verify package signatures and checksums from the official vendor repository. Downloads must be over HTTPS.",
+                "priority": "critical" if finding.severity == "critical" else "high",
+            })
+
+        # Generic fallback based on category
+        elif category == "vuln":
+            updates.append({
+                "name": "Software Update",
+                "type": "software_update",
+                "description": f"Check for available patches addressing: {finding.title}. Consult vendor documentation for update procedures.",
+                "vendor_url": "",
+                "integrity": "Verify package signatures from official vendor repository",
+                "priority": "high" if finding.severity in ("critical", "high") else "medium",
+            })
+        elif category == "misconfig":
+            updates.append({
+                "name": "Configuration Hardening",
+                "type": "config_change",
+                "description": f"Apply configuration changes to address: {finding.title}",
+                "vendor_url": "",
+                "integrity": "N/A — configuration change, no download required",
+                "priority": "medium",
+            })
+        elif category == "exposure":
+            updates.append({
+                "name": "Firewall / ACL Configuration",
+                "type": "config_change",
+                "description": f"Restrict network exposure by updating firewall rules or access control lists",
+                "vendor_url": "",
+                "integrity": "N/A — configuration change, no download required",
+                "priority": "high" if finding.severity in ("critical", "high") else "medium",
+            })
+
+        return updates
+
+    def _check_admin_requirements(self, finding: Finding, asset, plan_steps: list) -> tuple[bool, list[dict], str]:
+        """Determine if admin access is needed and explain why."""
+        admin_actions = []
+        title_lower = (finding.title or "").lower()
+        source_check = (finding.source_check or "").lower()
+        category = (finding.category or "").lower()
+        asset_type = (asset.asset_type or "").lower() if asset else ""
+        hostname = (asset.hostname or asset.ip_address) if asset else "the target device"
+
+        # Service restart
+        if any(kw in title_lower or kw in source_check for kw in ("ssh", "tls", "ssl", "http", "dns", "ftp", "smtp")):
+            admin_actions.append({
+                "action": "Restart the affected service after applying changes",
+                "reason": "The service daemon must be restarted to load the new configuration or updated binary",
+                "impact": "Active connections to the service will be briefly interrupted during restart",
+            })
+
+        # Firmware flash
+        if asset_type in ("router", "iot", "appliance", "switch", "access_point") or "firmware" in title_lower:
+            admin_actions.append({
+                "action": "Flash firmware update to the device",
+                "reason": "Firmware updates require administrative access to the device management interface",
+                "impact": "The device will reboot during the firmware update process. Network connectivity through this device will be temporarily lost.",
+            })
+
+        # Config file edit
+        if category == "misconfig" or any(kw in title_lower for kw in ("config", "header", "cipher", "protocol", "algorithm")):
+            admin_actions.append({
+                "action": "Modify service configuration files",
+                "reason": "Configuration files for system services are typically owned by root and require elevated privileges to edit",
+                "impact": "Incorrect configuration changes could prevent the service from starting. A backup will be recommended before changes.",
+            })
+
+        # Firewall rule change
+        if category == "exposure" or "firewall" in title_lower or "port" in title_lower:
+            admin_actions.append({
+                "action": "Update firewall rules or network ACLs",
+                "reason": "Firewall and network access control changes require administrative privileges",
+                "impact": "Overly restrictive rules could block legitimate traffic. Changes should be tested before applying to production.",
+            })
+
+        # Password change
+        if "credential" in title_lower or "password" in title_lower or "default" in title_lower:
+            admin_actions.append({
+                "action": "Change device or service credentials",
+                "reason": "Changing credentials on the device itself requires administrator access to the management interface",
+                "impact": "All sessions using the old credentials will be disconnected. Ensure new credentials are securely documented.",
+            })
+
+        # Software update/install
+        if category == "vuln" and not admin_actions:
+            admin_actions.append({
+                "action": "Install software update or security patch",
+                "reason": "Package installation and system updates require elevated (root/admin) privileges",
+                "impact": "The service may need to be restarted after patching. Schedule a maintenance window if the system is in production.",
+            })
+
+        admin_required = len(admin_actions) > 0
+
+        # Build explanation
+        if admin_required:
+            action_summaries = [a["action"].lower() for a in admin_actions]
+            admin_explanation = (
+                f"This remediation requires administrator access to {hostname} because the following actions "
+                f"need elevated privileges: {'; '.join(action_summaries)}. "
+                f"Please review each action below and grant explicit consent before proceeding."
+            )
+        else:
+            admin_explanation = ""
+
+        return admin_required, admin_actions, admin_explanation
+
     # ─── Execute Remediation (Step 4) ─────────────────────────────
 
     async def execute_remediation(self, finding_id: str, action: str = "set_in_progress", params: dict | None = None) -> dict:
@@ -166,6 +458,8 @@ class CopilotService:
             old_value={"status": old_status},
             new_value={"status": finding.status, "params": params or {}},
         )
+
+        await self.db.commit()
 
         return {
             "status": "success",
@@ -262,29 +556,37 @@ class CopilotService:
             return {"findings": [], "total": 0}
 
         triaged = []
-        for finding in sorted(findings, key=lambda f: SEVERITY_ORDER.get(f.severity, 0), reverse=True):
-            priority = self._calculate_priority(finding)
-            item = {
-                "finding_id": finding.id,
-                "title": finding.title,
-                "severity": finding.severity,
-                "category": finding.category,
-                "priority_score": priority["score"],
-                "priority_label": priority["label"],
-                "rationale": priority["rationale"],
-                "recommended_action": self._recommend_action(finding),
-                "effort_estimate": self._estimate_effort(finding),
-            }
-            triaged.append(item)
+        for finding in sorted(findings, key=lambda f: SEVERITY_ORDER.get(f.severity or "info", 0), reverse=True):
+            try:
+                priority = self._calculate_priority(finding)
+                item = {
+                    "finding_id": finding.id,
+                    "title": finding.title or "Untitled Finding",
+                    "severity": finding.severity or "info",
+                    "category": finding.category or "unknown",
+                    "priority_score": priority["score"],
+                    "priority_label": priority["label"],
+                    "rationale": priority["rationale"],
+                    "recommended_action": self._recommend_action(finding),
+                    "effort_estimate": self._estimate_effort(finding),
+                }
+                triaged.append(item)
+            except Exception as e:
+                logger.warning("Failed to triage finding", finding_id=finding.id, error=str(e))
+                continue
 
         triaged.sort(key=lambda s: s["priority_score"], reverse=True)
 
-        await self.audit_trail.log(
-            event_type="ai_suggestion", entity_type="copilot",
-            entity_id="triage", actor="ai_copilot",
-            action="triage_findings",
-            new_value={"finding_count": len(findings), "suggestion_count": len(triaged)},
-        )
+        try:
+            await self.audit_trail.log(
+                event_type="ai_suggestion", entity_type="copilot",
+                entity_id="triage", actor="ai_copilot",
+                action="triage_findings",
+                new_value={"finding_count": len(findings), "suggestion_count": len(triaged)},
+            )
+            await self.db.commit()
+        except Exception as e:
+            logger.warning("Audit trail log failed during triage", error=str(e))
 
         return {
             "findings": triaged,
@@ -297,7 +599,7 @@ class CopilotService:
         reasons = []
 
         severity_scores = {"critical": 40, "high": 30, "medium": 20, "low": 10, "info": 0}
-        sev_score = severity_scores.get(finding.severity, 0)
+        sev_score = severity_scores.get(finding.severity or "info", 0)
         score += sev_score
         if sev_score >= 30:
             reasons.append(f"{finding.severity} severity")
@@ -309,7 +611,7 @@ class CopilotService:
                 reasons.append(f"high exploitability ({finding.exploitability_score})")
 
         category_scores = {"exposure": 15, "vuln": 12, "misconfig": 10, "info": 0}
-        cat_score = category_scores.get(finding.category, 5)
+        cat_score = category_scores.get(finding.category or "info", 5)
         score += cat_score
         if cat_score >= 12:
             reasons.append(f"{finding.category} category")

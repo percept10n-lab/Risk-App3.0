@@ -64,3 +64,11 @@ async def init_db():
             await conn.execute(text("ALTER TABLE risks ADD COLUMN treatment_measures JSON"))
         except Exception:
             pass
+        try:
+            await conn.execute(text("ALTER TABLE threats ADD COLUMN c4_level VARCHAR(50)"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE threats ADD COLUMN stride_category_detail TEXT"))
+        except Exception:
+            pass

@@ -26,5 +26,7 @@ class Threat(Base):
     linked_finding_ids: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=list)
     confidence: Mapped[float] = mapped_column(Float, default=0.5)
     rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    c4_level: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    stride_category_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())

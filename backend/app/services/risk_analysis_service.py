@@ -26,6 +26,8 @@ class RiskAnalysisService:
         self, asset_id: str | None = None, run_id: str | None = None
     ) -> dict:
         """Run full ISO 27005 risk analysis across assets, threats, and findings."""
+        from app.config import settings as app_settings
+
         logger.info("Starting risk analysis", asset_id=asset_id, run_id=run_id)
 
         await self.audit_trail.log(
@@ -40,6 +42,31 @@ class RiskAnalysisService:
             query = query.where(Asset.id == asset_id)
         result = await self.db.execute(query)
         assets = list(result.scalars().all())
+
+        # Check IP reputation for WAN-accessible assets if keys configured
+        ip_reputation_data: dict[str, dict] = {}
+        has_rep_keys = bool(app_settings.abuseipdb_api_key or app_settings.greynoise_api_key or app_settings.alienvault_otx_api_key)
+        if has_rep_keys:
+            try:
+                from mcp_servers.exploit_exposure.ip_reputation import IPReputationClient
+                rep_client = IPReputationClient(
+                    abuseipdb_key=app_settings.abuseipdb_api_key,
+                    greynoise_key=app_settings.greynoise_api_key,
+                    otx_key=app_settings.alienvault_otx_api_key,
+                )
+                wan_assets = [
+                    a for a in assets
+                    if (a.exposure or {}).get("wan_accessible")
+                ]
+                for asset in wan_assets[:10]:  # Cap at 10 to avoid rate limits
+                    try:
+                        rep = await rep_client.check_ip(asset.ip_address)
+                        if rep.get("risk_score") is not None:
+                            ip_reputation_data[asset.id] = rep
+                    except Exception as e:
+                        logger.warning("IP rep check failed", ip=asset.ip_address, error=str(e))
+            except Exception as e:
+                logger.warning("IP reputation integration skipped", error=str(e))
 
         created = 0
         updated = 0
@@ -60,7 +87,8 @@ class RiskAnalysisService:
                 findings = list(finding_result.scalars().all())
 
                 # Generate risk items from threat+finding combinations
-                risk_items = self._generate_risk_scenarios(asset, threats, findings)
+                asset_rep = ip_reputation_data.get(asset.id)
+                risk_items = self._generate_risk_scenarios(asset, threats, findings, ip_rep=asset_rep)
 
                 for risk_data in risk_items:
                     risk, is_new = await self._create_or_update_risk(risk_data)
@@ -107,7 +135,8 @@ class RiskAnalysisService:
         }
 
     def _generate_risk_scenarios(
-        self, asset: Asset, threats: list[Threat], findings: list[Finding]
+        self, asset: Asset, threats: list[Threat], findings: list[Finding],
+        ip_rep: dict | None = None,
     ) -> list[dict]:
         """Generate risk scenarios from asset+threat+finding combinations."""
         from mcp_servers.risk_engine.analyzer import RiskAnalyzer
@@ -125,6 +154,10 @@ class RiskAnalysisService:
             "data_types": asset.data_types or [],
             "hostname": asset.hostname,
         }
+
+        # If IP reputation data is available, attach it to asset_data
+        if ip_rep and ip_rep.get("risk_score") is not None:
+            asset_data["ip_reputation_score"] = ip_rep["risk_score"]
 
         risk_items = []
 

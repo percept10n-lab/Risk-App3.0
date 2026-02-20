@@ -4,6 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.models.finding import Finding
+from app.models.asset import Asset
+from app.models.risk import Risk
+from app.models.mitre_mapping import MitreMapping
 from app.models.vulnerability import Vulnerability
 from app.evidence.audit_trail import AuditTrail
 import structlog
@@ -234,4 +237,81 @@ class VulnMgmtService:
             "sla_compliance_rate": sla_rate,
             "sla_breached": len(breached),
             "sla_at_risk": len(at_risk),
+        }
+
+    async def get_enriched_finding(self, finding_id: str) -> dict | None:
+        """Get finding with full context for vulnerability management."""
+        result = await self.db.execute(select(Finding).where(Finding.id == finding_id))
+        finding = result.scalar_one_or_none()
+        if not finding:
+            return None
+
+        # Asset
+        asset = None
+        if finding.asset_id:
+            a_res = await self.db.execute(select(Asset).where(Asset.id == finding.asset_id))
+            asset = a_res.scalar_one_or_none()
+
+        # MITRE Mappings
+        m_res = await self.db.execute(
+            select(MitreMapping).where(MitreMapping.finding_id == finding_id)
+        )
+        mitre = list(m_res.scalars().all())
+
+        # Risks
+        r_res = await self.db.execute(
+            select(Risk).where(Risk.finding_id == finding_id)
+        )
+        risks = list(r_res.scalars().all())
+
+        return {
+            "finding": {
+                "id": finding.id,
+                "title": finding.title,
+                "severity": finding.severity,
+                "category": finding.category,
+                "status": finding.status,
+                "description": finding.description,
+                "remediation": finding.remediation,
+                "cwe_id": finding.cwe_id,
+                "cve_ids": finding.cve_ids or [],
+                "cpe": finding.cpe,
+                "raw_output_snippet": finding.raw_output_snippet,
+                "source_tool": finding.source_tool,
+                "source_check": finding.source_check,
+                "exploitability_score": finding.exploitability_score,
+                "exploitability_rationale": finding.exploitability_rationale,
+                "created_at": finding.created_at.isoformat() if finding.created_at else None,
+                "updated_at": finding.updated_at.isoformat() if finding.updated_at else None,
+            },
+            "asset": {
+                "id": asset.id,
+                "hostname": asset.hostname,
+                "ip_address": asset.ip_address,
+                "asset_type": asset.asset_type,
+                "zone": asset.zone,
+                "criticality": asset.criticality,
+                "vendor": asset.vendor,
+                "os_guess": asset.os_guess,
+            } if asset else None,
+            "mitre_mappings": [
+                {
+                    "technique_id": m.technique_id,
+                    "technique_name": m.technique_name,
+                    "tactic": m.tactic,
+                    "confidence": m.confidence,
+                }
+                for m in mitre
+            ],
+            "risks": [
+                {
+                    "id": r.id,
+                    "scenario": r.scenario,
+                    "risk_level": r.risk_level,
+                    "likelihood": r.likelihood,
+                    "impact": r.impact,
+                    "treatment": r.treatment,
+                }
+                for r in risks
+            ],
         }

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import PageHeader from '../common/PageHeader'
 import Badge from '../common/Badge'
-import { Bot, Lightbulb, Wrench, FileText, Loader2, ChevronDown, ChevronUp, Play, CheckCircle2, XCircle, RotateCcw, ArrowRight } from 'lucide-react'
+import { Bot, Lightbulb, Wrench, FileText, Loader2, ChevronDown, ChevronUp, Play, CheckCircle2, XCircle, RotateCcw, ArrowRight, Shield, ExternalLink, Download, AlertTriangle, MessageSquare } from 'lucide-react'
 import { copilotApi } from '../../api/endpoints'
+import AgentChat from './AgentChat'
 
 interface TriageItem {
   finding_id: string
@@ -14,12 +15,12 @@ interface TriageItem {
   effort_estimate: string
 }
 
-type WorkflowStep = 'IDLE' | 'INVESTIGATE' | 'PLAN' | 'CONFIRM' | 'EXECUTE' | 'VERIFY' | 'REPORT'
+type WorkflowStep = 'IDLE' | 'INVESTIGATE' | 'PLAN' | 'CONFIRM' | 'GATHER' | 'EXECUTE' | 'VERIFY' | 'REPORT'
 
-const STEP_ORDER: WorkflowStep[] = ['INVESTIGATE', 'PLAN', 'CONFIRM', 'EXECUTE', 'VERIFY', 'REPORT']
+const STEP_ORDER: WorkflowStep[] = ['INVESTIGATE', 'PLAN', 'CONFIRM', 'GATHER', 'EXECUTE', 'VERIFY', 'REPORT']
 const STEP_LABELS: Record<string, string> = {
   INVESTIGATE: 'Investigate', PLAN: 'Plan', CONFIRM: 'Confirm',
-  EXECUTE: 'Execute', VERIFY: 'Verify', REPORT: 'Report',
+  GATHER: 'Gather', EXECUTE: 'Execute', VERIFY: 'Verify', REPORT: 'Report',
 }
 
 interface InvestigateFinding {
@@ -48,6 +49,22 @@ interface VerifyResult {
   scan_result?: { findings?: Array<{ severity: string; title: string }> }
 }
 
+interface GatherData {
+  updates: Array<{
+    name: string
+    type: string
+    description: string
+    vendor_url: string
+    integrity: string
+    priority: string
+  }>
+  admin_required: boolean
+  admin_actions: Array<{ action: string; reason: string; impact: string }>
+  admin_explanation: string
+  summary: string
+  asset: { ip: string; hostname: string; vendor: string; os_guess: string; asset_type: string } | null
+}
+
 interface InvestigateData {
   finding: InvestigateFinding
   asset: InvestigateAsset | null
@@ -58,6 +75,7 @@ interface InvestigateData {
 }
 
 export default function CopilotPage() {
+  const [activeTab, setActiveTab] = useState<'agent' | 'workflow'>('agent')
   const [triageResults, setTriageResults] = useState<TriageItem[]>([])
   const [loading, setLoading] = useState<Record<string, boolean>>({})
   const [actionError, setActionError] = useState<string | null>(null)
@@ -68,10 +86,10 @@ export default function CopilotPage() {
   const [investigateData, setInvestigateData] = useState<InvestigateData | null>(null)
   const [executeResult, setExecuteResult] = useState<ExecuteResult | null>(null)
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null)
+  const [gatherData, setGatherData] = useState<GatherData | null>(null)
+  const [adminConsent, setAdminConsent] = useState(false)
 
-  useEffect(() => {
-    runTriage()
-  }, [])
+  // Triage runs when workflow tab is opened (not on mount since agent tab is default)
 
   async function runTriage() {
     setLoading((p) => ({ ...p, triage: true }))
@@ -100,6 +118,21 @@ export default function CopilotPage() {
       setActionError(err.response?.data?.detail || err.message || 'Investigation failed')
     }
     setLoading((p) => ({ ...p, investigate: false }))
+  }
+
+  async function runGather() {
+    if (!selectedFindingId) return
+    setCurrentStep('GATHER')
+    setGatherData(null)
+    setAdminConsent(false)
+    setLoading((p) => ({ ...p, gather: true }))
+    try {
+      const res = await copilotApi.gather(selectedFindingId)
+      setGatherData(res.data)
+    } catch (err: any) {
+      setActionError(err.response?.data?.detail || err.message || 'Gather failed')
+    }
+    setLoading((p) => ({ ...p, gather: false }))
   }
 
   async function executeRemediation() {
@@ -157,6 +190,8 @@ export default function CopilotPage() {
     setInvestigateData(null)
     setExecuteResult(null)
     setVerifyResult(null)
+    setGatherData(null)
+    setAdminConsent(false)
   }
 
   const priorityColor = (score: number) => {
@@ -174,26 +209,66 @@ export default function CopilotPage() {
         description="AI-assisted security analysis and remediation workflow"
         actions={
           <div className="flex gap-2">
-            <button onClick={runTriage} disabled={loading.triage} className="btn-secondary flex items-center gap-2">
-              <Lightbulb className="w-4 h-4" /> {loading.triage ? 'Analyzing...' : 'Run Triage'}
-            </button>
-            {currentStep !== 'IDLE' && (
-              <button onClick={resetWorkflow} className="btn-secondary flex items-center gap-2">
-                <RotateCcw className="w-4 h-4" /> Reset Workflow
-              </button>
+            {activeTab === 'workflow' && (
+              <>
+                <button onClick={runTriage} disabled={loading.triage} className="btn-secondary flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4" /> {loading.triage ? 'Analyzing...' : 'Run Triage'}
+                </button>
+                {currentStep !== 'IDLE' && (
+                  <button onClick={resetWorkflow} className="btn-secondary flex items-center gap-2">
+                    <RotateCcw className="w-4 h-4" /> Reset Workflow
+                  </button>
+                )}
+              </>
             )}
           </div>
         }
       />
 
-      {actionError && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
-          <span className="text-sm text-red-700">{actionError}</span>
-          <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600 text-sm ml-4">Dismiss</button>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setActiveTab('agent')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'agent'
+              ? 'bg-white text-brand-600 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4" />
+          Security Agent
+        </button>
+        <button
+          onClick={() => { setActiveTab('workflow'); if (triageResults.length === 0) runTriage() }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === 'workflow'
+              ? 'bg-white text-brand-600 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Wrench className="w-4 h-4" />
+          Remediation Workflow
+        </button>
+      </div>
+
+      {/* Agent Chat Tab */}
+      {activeTab === 'agent' && (
+        <div className="card overflow-hidden">
+          <AgentChat />
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* Workflow Tab */}
+      {activeTab === 'workflow' && (
+        <>
+          {actionError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+              <span className="text-sm text-red-700">{actionError}</span>
+              <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-600 text-sm ml-4">Dismiss</button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left: Triage List */}
         <div className="lg:col-span-2">
           <div className="card">
@@ -243,7 +318,7 @@ export default function CopilotPage() {
             <div className="card p-12 text-center">
               <Bot className="w-16 h-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-700 mb-2">Select a Finding to Begin</h3>
-              <p className="text-sm text-gray-500">Click on a finding in the triage list to start the 6-step remediation workflow.</p>
+              <p className="text-sm text-gray-500">Click on a finding in the triage list to start the 7-step remediation workflow.</p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -411,13 +486,140 @@ export default function CopilotPage() {
                         This will set the finding status to "in_progress" and log the action. Continue?
                       </p>
                       <div className="flex gap-3">
-                        <button onClick={executeRemediation} className="btn-primary flex items-center gap-2">
+                        <button onClick={runGather} className="btn-primary flex items-center gap-2">
                           <Play className="w-4 h-4" /> Execute
                         </button>
                         <button onClick={() => setCurrentStep('PLAN')} className="btn-secondary">
                           Cancel
                         </button>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* GATHER */}
+                {currentStep === 'GATHER' && (
+                  <div>
+                    <div className="px-6 py-4 border-b flex items-center gap-2">
+                      <Download className="w-5 h-5 text-indigo-500" />
+                      <h3 className="font-semibold">Gather Updates & Permissions</h3>
+                    </div>
+                    <div className="p-6">
+                      {loading.gather ? (
+                        <div className="flex items-center gap-3 py-8 justify-center">
+                          <Loader2 className="w-6 h-6 animate-spin text-brand-500" />
+                          <span className="text-gray-500">Checking for available updates and patches...</span>
+                        </div>
+                      ) : gatherData ? (
+                        <div className="space-y-5">
+                          {/* Updates */}
+                          {gatherData.updates.length > 0 && (
+                            <div>
+                              <h4 className="text-sm font-semibold text-gray-700 mb-3">Available Updates & Patches</h4>
+                              <div className="space-y-3">
+                                {gatherData.updates.map((u, i) => (
+                                  <div key={i} className="border rounded-lg p-4 bg-gray-50">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <span className="font-medium text-sm">{u.name}</span>
+                                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                        u.type === 'software_update' ? 'bg-blue-100 text-blue-700' :
+                                        u.type === 'firmware_update' ? 'bg-purple-100 text-purple-700' :
+                                        'bg-gray-200 text-gray-700'
+                                      }`}>
+                                        {u.type === 'software_update' ? 'Software Update' :
+                                         u.type === 'firmware_update' ? 'Firmware Update' : 'Config Change'}
+                                      </span>
+                                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                        u.priority === 'critical' ? 'bg-red-100 text-red-700' :
+                                        u.priority === 'high' ? 'bg-orange-100 text-orange-700' :
+                                        'bg-yellow-100 text-yellow-700'
+                                      }`}>
+                                        {u.priority}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 mb-2">{u.description}</p>
+                                    {u.vendor_url && (
+                                      <a
+                                        href={u.vendor_url.startsWith('http') ? u.vendor_url : undefined}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-brand-600 hover:underline flex items-center gap-1"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                        {u.vendor_url.startsWith('http') ? u.vendor_url : u.vendor_url}
+                                      </a>
+                                    )}
+                                    <div className="mt-2 text-xs text-gray-500 italic">
+                                      {u.integrity}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {gatherData.updates.length === 0 && (
+                            <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded-lg">
+                              No specific updates or patches identified for this finding.
+                            </div>
+                          )}
+
+                          {/* Admin Access Section */}
+                          {gatherData.admin_required && (
+                            <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-5">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Shield className="w-5 h-5 text-amber-600" />
+                                <h4 className="font-semibold text-amber-800">Administrator Access Required</h4>
+                              </div>
+                              <p className="text-sm text-amber-700 mb-4">{gatherData.admin_explanation}</p>
+                              <div className="space-y-3 mb-4">
+                                {gatherData.admin_actions.map((a, i) => (
+                                  <div key={i} className="bg-white border border-amber-200 rounded-lg p-3">
+                                    <p className="text-sm font-medium text-gray-800">{a.action}</p>
+                                    <p className="text-xs text-gray-600 mt-1">
+                                      <span className="font-medium">Reason:</span> {a.reason}
+                                    </p>
+                                    <p className="text-xs text-amber-600 mt-1 flex items-start gap-1">
+                                      <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                                      <span><span className="font-medium">Impact:</span> {a.impact}</span>
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                              <label className="flex items-center gap-3 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={adminConsent}
+                                  onChange={(e) => setAdminConsent(e.target.checked)}
+                                  className="w-4 h-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                                />
+                                <span className="text-sm font-medium text-amber-800">
+                                  I understand and grant administrator access for the actions listed above
+                                </span>
+                              </label>
+                            </div>
+                          )}
+
+                          {/* Summary */}
+                          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                            {gatherData.summary}
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex gap-3">
+                            <button
+                              onClick={executeRemediation}
+                              disabled={gatherData.admin_required && !adminConsent}
+                              className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <ArrowRight className="w-4 h-4" /> Proceed to Execute
+                            </button>
+                            <button onClick={() => setCurrentStep('PLAN')} className="btn-secondary">
+                              Back to Plan
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 )}
@@ -558,6 +760,8 @@ export default function CopilotPage() {
           )}
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }

@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     ai_model: str = "llama3.2"
     ai_api_key: str = ""
 
+    # Threat Intelligence
+    abuseipdb_api_key: str = ""
+    greynoise_api_key: str = ""
+    alienvault_otx_api_key: str = ""
+    threat_feed_cache_ttl: int = 3600  # 1 hour
+    threat_feed_mode: str = "fallback"  # live, offline, fallback
+
     # Scanner defaults
     default_scan_rate: int = 100  # packets per second
     scan_timeout: int = 300  # seconds

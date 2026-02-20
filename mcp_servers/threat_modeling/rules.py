@@ -8,6 +8,15 @@ import structlog
 
 logger = structlog.get_logger()
 
+STRIDE_DETAILS = {
+    "spoofing": "STRIDE/Spoofing: {context} — An attacker could impersonate a legitimate entity to gain unauthorized access.",
+    "tampering": "STRIDE/Tampering: {context} — Data or configuration could be modified without authorization.",
+    "repudiation": "STRIDE/Repudiation: {context} — Actions could be performed without proper audit trail.",
+    "information_disclosure": "STRIDE/Information Disclosure: {context} — Sensitive data could be exposed to unauthorized parties.",
+    "denial_of_service": "STRIDE/Denial of Service: {context} — Service availability could be disrupted.",
+    "elevation_of_privilege": "STRIDE/Elevation of Privilege: {context} — An attacker could gain higher privileges than authorized.",
+}
+
 
 class ThreatRuleEngine:
     def evaluate(self, asset: dict) -> list[dict]:
@@ -42,6 +51,16 @@ class ThreatRuleEngine:
         boost = crit_boost.get(criticality, 0.0)
         for t in threats:
             t["confidence"] = max(0.1, min(1.0, t["confidence"] + boost))
+
+        # Assign C4 level and STRIDE detail for component-level threats
+        hostname = asset.get("hostname") or asset.get("ip_address", "unknown")
+        for t in threats:
+            t["c4_level"] = "component"
+            threat_type = t.get("threat_type", "")
+            context = f"{hostname} ({asset_type}) in {zone} zone"
+            t["stride_category_detail"] = STRIDE_DETAILS.get(
+                threat_type, f"STRIDE/{threat_type}: {context}"
+            ).format(context=context)
 
         # Deduplicate by title
         seen = set()
@@ -229,6 +248,15 @@ class ThreatRuleEngine:
                 "zone": zone,
             })
 
+        # Assign C4 level and STRIDE detail for container-level threats
+        context = f"{zone} zone ({asset_count} assets)"
+        for t in threats:
+            t["c4_level"] = "container"
+            threat_type = t.get("threat_type", "")
+            t["stride_category_detail"] = STRIDE_DETAILS.get(
+                threat_type, f"STRIDE/{threat_type}: {context}"
+            ).format(context=context)
+
         return threats
 
     def evaluate_trust_boundary(self, from_zone: str, to_zone: str, services: list[str], controls: list[str]) -> list[dict]:
@@ -267,5 +295,19 @@ class ThreatRuleEngine:
                 "source": "rule",
                 "trust_boundary": f"{from_zone} -> {to_zone}",
             })
+
+        # Assign C4 level and STRIDE detail for boundary threats
+        # WAN boundaries are system_context level; internal boundaries are container level
+        wan_zones = {"wan", "internet", "external"}
+        is_wan_boundary = from_zone.lower() in wan_zones or to_zone.lower() in wan_zones
+        c4_level = "system_context" if is_wan_boundary else "container"
+        context = f"boundary {from_zone} <-> {to_zone}"
+
+        for t in threats:
+            t["c4_level"] = c4_level
+            threat_type = t.get("threat_type", "")
+            t["stride_category_detail"] = STRIDE_DETAILS.get(
+                threat_type, f"STRIDE/{threat_type}: {context}"
+            ).format(context=context)
 
         return threats

@@ -8,11 +8,11 @@ import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle } fro
 const STEPS = [
   { key: 'discovery', label: 'Asset Discovery', description: 'Scan network for devices' },
   { key: 'fingerprinting', label: 'Fingerprinting', description: 'Identify services and OS' },
-  { key: 'threat_modeling', label: 'Threat Modeling', description: 'Identify potential threats' },
-  { key: 'vuln_scanning', label: 'Vulnerability Scanning', description: 'Check for vulnerabilities' },
-  { key: 'exploit_analysis', label: 'Exploit Analysis', description: 'Assess exploitability' },
-  { key: 'mitre_mapping', label: 'MITRE Mapping', description: 'Map to ATT&CK techniques' },
-  { key: 'risk_analysis', label: 'Risk Analysis', description: 'Calculate risk levels' },
+  { key: 'vuln_scanning', label: 'Vulnerability Scanning', description: 'Check for known vulnerabilities' },
+  { key: 'exploit_analysis', label: 'Exploit Analysis', description: 'Assess exploitability of findings' },
+  { key: 'threat_modeling', label: 'Threat Modeling', description: 'Model threats based on findings & assets' },
+  { key: 'mitre_mapping', label: 'MITRE Mapping', description: 'Map findings & threats to ATT&CK' },
+  { key: 'risk_analysis', label: 'Risk Analysis', description: 'Calculate risk levels (ISO 27005)' },
   { key: 'baseline', label: 'Baseline Snapshot', description: 'Create drift detection baseline' },
 ]
 
@@ -93,6 +93,9 @@ export default function WorkflowPage() {
         break
       case 'step_complete':
         setConsoleLines(prev => [...prev, `[${ts}]    ${text}`])
+        break
+      case 'step_detail':
+        setConsoleLines(prev => [...prev, `[${ts}]      ${text}`])
         break
       case 'step_warning':
         setConsoleLines(prev => [...prev, `[${ts}] ${text}`])

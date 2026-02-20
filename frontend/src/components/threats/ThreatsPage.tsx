@@ -48,6 +48,18 @@ const strideBadgeColor: Record<string, string> = {
   elevation_of_privilege: 'bg-pink-100 text-pink-800',
 }
 
+const c4BadgeColor: Record<string, string> = {
+  system_context: 'bg-purple-100 text-purple-800',
+  container: 'bg-blue-100 text-blue-800',
+  component: 'bg-gray-100 text-gray-700',
+}
+
+const c4Label: Record<string, string> = {
+  system_context: 'System Context',
+  container: 'Container',
+  component: 'Component',
+}
+
 const strideLabel: Record<string, string> = Object.fromEntries(
   STRIDE_TYPES.map((s) => [s.value, s.label])
 )
@@ -125,9 +137,28 @@ function ThreatsTab() {
     return acc
   }, {})
 
+  const c4Counts = {
+    system_context: threats.filter((t) => t.c4_level === 'system_context').length,
+    container: threats.filter((t) => t.c4_level === 'container').length,
+    component: threats.filter((t) => t.c4_level === 'component').length,
+  }
+
   return (
     <div>
-      {/* Summary stats */}
+      {/* C4 Level Summary */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {(['system_context', 'container', 'component'] as const).map((level) => (
+          <div key={level} className="card p-3 flex items-center gap-3">
+            <span className={`px-2 py-1 rounded text-xs font-medium ${c4BadgeColor[level]}`}>
+              {c4Label[level]}
+            </span>
+            <span className="text-xl font-bold text-gray-900">{c4Counts[level]}</span>
+            <span className="text-xs text-gray-500">threats</span>
+          </div>
+        ))}
+      </div>
+
+      {/* STRIDE stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
         <div className="card p-3 text-center">
           <p className="text-2xl font-bold text-gray-900">{total}</p>
@@ -192,6 +223,7 @@ function ThreatsTab() {
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-8" />
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">C4</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Asset</th>
@@ -239,6 +271,15 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
       <tr className="hover:bg-gray-50 transition-colors cursor-pointer" onClick={onToggle}>
         <td className="px-4 py-3">
           {expanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+        </td>
+        <td className="px-4 py-3">
+          {threat.c4_level ? (
+            <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${c4BadgeColor[threat.c4_level] || 'bg-gray-100 text-gray-700'}`}>
+              {c4Label[threat.c4_level] || threat.c4_level}
+            </span>
+          ) : (
+            <span className="text-xs text-gray-400">-</span>
+          )}
         </td>
         <td className="px-4 py-3">
           <span className={`badge ${strideBadgeColor[threat.threat_type] || 'bg-gray-100 text-gray-800'}`}>
@@ -302,13 +343,19 @@ function ThreatRow({ threat, expanded, onToggle, onDelete }: {
       </tr>
       {expanded && (
         <tr className="bg-gray-50">
-          <td colSpan={10} className="px-8 py-4">
+          <td colSpan={11} className="px-8 py-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
               <div>
                 <p className="font-medium text-gray-700 mb-1">Description</p>
                 <p className="text-gray-600">{threat.description}</p>
               </div>
-              {threat.rationale && (
+              {threat.stride_category_detail && (
+                <div>
+                  <p className="font-medium text-gray-700 mb-1">STRIDE Analysis</p>
+                  <p className="text-gray-600 bg-blue-50 border border-blue-100 rounded p-2">{threat.stride_category_detail}</p>
+                </div>
+              )}
+              {threat.rationale && !threat.stride_category_detail && (
                 <div>
                   <p className="font-medium text-gray-700 mb-1">Rationale</p>
                   <p className="text-gray-600">{threat.rationale}</p>

@@ -104,6 +104,7 @@ export const copilotApi = {
   triage: (findingIds: string[]) => api.post('/copilot/triage', { finding_ids: findingIds }),
   remediation: (findingId: string, context?: any) => api.post('/copilot/remediation', { finding_id: findingId, context }),
   investigate: (findingId: string) => api.post('/copilot/investigate', { finding_id: findingId }),
+  gather: (findingId: string) => api.post('/copilot/gather', { finding_id: findingId }),
   executeRemediation: (data: { finding_id: string; action: string; params?: any }) =>
     api.post('/copilot/execute-remediation', data),
   verify: (data: { finding_id: string; action_id: string; target: string }) =>
@@ -111,6 +112,8 @@ export const copilotApi = {
   mitreSuggest: (findingId: string) => api.post('/copilot/mitre-suggest', null, { params: { finding_id: findingId } }),
   narrative: (data: any) => api.post('/copilot/narrative', data),
   suggestions: () => api.get('/copilot/suggestions'),
+  chat: (message: string, conversation: Array<{ role: string; content: string }>) =>
+    api.post('/copilot/chat', { message, conversation }),
 }
 
 // Drift
@@ -143,10 +146,22 @@ export const nmapApi = {
   status: (runId: string) => api.get(`/nmap/status/${runId}`),
 }
 
+// Vuln Management
+export const vulnMgmtApi = {
+  metrics: () => api.get('/vulns/metrics'),
+  enrichedFinding: (findingId: string) => api.get(`/vulns/finding/${findingId}/enriched`),
+}
+
 // Intel
 export const intelApi = {
   summary: (days: number = 7) => api.get('/intel/summary', { params: { days } }),
   dailyBrief: () => api.get('/intel/daily-brief'),
+  news: () => api.get('/intel/news'),
+  lookupCve: (cveId: string) => api.get(`/intel/cve/${cveId}`),
+  lookupIp: (ip: string) => api.get(`/intel/ip/${ip}`),
+  searchIoc: (indicator: string) => api.get(`/intel/ioc/${indicator}`),
+  lookupCerts: (domain: string) => api.get(`/intel/certs/${domain}`),
+  feedStatus: () => api.get('/intel/feed-status'),
 }
 
 // Schedules

@@ -15,9 +15,10 @@ try:
     import weasyprint  # type: ignore[import-untyped]
 
     WEASYPRINT_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError) as _exc:
+    weasyprint = None  # type: ignore[assignment]
     WEASYPRINT_AVAILABLE = False
-    logger.warning("weasyprint not installed; PDF generation will fall back to HTML output")
+    logger.warning("weasyprint not available; PDF generation will fall back to HTML output", reason=str(_exc))
 
 
 class PDFReportGenerator:

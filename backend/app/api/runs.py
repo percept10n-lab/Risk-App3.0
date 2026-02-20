@@ -28,8 +28,8 @@ router = APIRouter()
 
 
 PIPELINE_STEPS = [
-    "discovery", "fingerprinting", "threat_modeling", "vuln_scanning",
-    "exploit_analysis", "mitre_mapping", "risk_analysis", "baseline",
+    "discovery", "fingerprinting", "vuln_scanning", "exploit_analysis",
+    "threat_modeling", "mitre_mapping", "risk_analysis", "baseline",
 ]
 
 
@@ -79,7 +79,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
     STEP_TIMEOUTS = {
         "discovery": 90,
         "fingerprinting": 90,
-        "threat_modeling": 30,
+        "threat_modeling": 60,
         "vuln_scanning": 90,
         "exploit_analysis": 30,
         "mitre_mapping": 30,
@@ -132,21 +132,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
             fp_count = fp_result.get("assets_fingerprinted", "?") if isinstance(fp_result, dict) else "?"
             await _broadcast(run_id, "step_complete", f"Fingerprinting complete — {fp_count} assets profiled", step="fingerprinting")
 
-            # Step 3: Threat Modeling
-            await _update_run_step(db, run_id, "threat_modeling", completed_steps)
-            await _broadcast(run_id, "step_start", STEP_LABELS["threat_modeling"][1], step="threat_modeling")
-            logger.info("Pipeline step: threat_modeling", run_id=run_id)
-            threat_svc = ThreatService(db)
-            tm_result = await _run_step_with_timeout(
-                threat_svc.run_threat_modeling(run_id=run_id),
-                "threat_modeling", STEP_TIMEOUTS["threat_modeling"], run_id=run_id,
-            )
-            await db.commit()
-            completed_steps.append("threat_modeling")
-            tm_count = tm_result.get("threats_created", "?") if isinstance(tm_result, dict) else "?"
-            await _broadcast(run_id, "step_complete", f"Threat modeling complete — {tm_count} threats identified", step="threat_modeling")
-
-            # Step 4: Vulnerability Scanning
+            # Step 3: Vulnerability Scanning
             await _update_run_step(db, run_id, "vuln_scanning", completed_steps)
             await _broadcast(run_id, "step_start", STEP_LABELS["vuln_scanning"][1], step="vuln_scanning")
             logger.info("Pipeline step: vuln_scanning", run_id=run_id)
@@ -160,7 +146,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
             vs_count = vs_result.get("findings_created", "?") if isinstance(vs_result, dict) else "?"
             await _broadcast(run_id, "step_complete", f"Vulnerability scan complete — {vs_count} findings", step="vuln_scanning")
 
-            # Step 5: Exploit Analysis
+            # Step 4: Exploit Analysis
             await _update_run_step(db, run_id, "exploit_analysis", completed_steps)
             await _broadcast(run_id, "step_start", STEP_LABELS["exploit_analysis"][1], step="exploit_analysis")
             logger.info("Pipeline step: exploit_analysis", run_id=run_id)
@@ -173,6 +159,32 @@ async def _execute_pipeline(run_id: str, scope: dict):
             completed_steps.append("exploit_analysis")
             ea_count = ea_result.get("enriched", "?") if isinstance(ea_result, dict) else "?"
             await _broadcast(run_id, "step_complete", f"Exploit analysis complete — {ea_count} findings enriched", step="exploit_analysis")
+
+            # Step 5: Threat Modeling (C4 decomposition)
+            await _update_run_step(db, run_id, "threat_modeling", completed_steps)
+            await _broadcast(run_id, "step_start", STEP_LABELS["threat_modeling"][1], step="threat_modeling")
+            logger.info("Pipeline step: threat_modeling", run_id=run_id)
+            threat_svc = ThreatService(db)
+
+            async def threat_broadcast(msg):
+                await _broadcast(run_id, "step_detail", msg, step="threat_modeling")
+
+            tm_result = await _run_step_with_timeout(
+                threat_svc.run_full_threat_modeling(run_id=run_id, broadcast_fn=threat_broadcast),
+                "threat_modeling", STEP_TIMEOUTS["threat_modeling"], run_id=run_id,
+            )
+            await db.commit()
+            completed_steps.append("threat_modeling")
+            if isinstance(tm_result, dict):
+                tm_count = tm_result.get("threats_created", "?")
+                stride = tm_result.get("by_stride", {})
+                stride_str = " ".join(f"{k[0].upper()}:{v}" for k, v in sorted(stride.items())) if stride else ""
+                msg = f"Threat modeling complete — {tm_count} threats"
+                if stride_str:
+                    msg += f" ({stride_str})"
+            else:
+                msg = "Threat modeling complete"
+            await _broadcast(run_id, "step_complete", msg, step="threat_modeling")
 
             # Step 6: MITRE Mapping
             await _update_run_step(db, run_id, "mitre_mapping", completed_steps)

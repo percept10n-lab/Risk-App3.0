@@ -6,9 +6,10 @@ threat modeling, and risk management.
 ## Features
 - **Asset Discovery**: Automated network scanning and device identification
 - **Vulnerability Scanning**: Security configuration checks (HTTP, TLS, SSH, DNS)
-- **Threat Modeling**: STRIDE-based threat identification with trust boundaries
-- **Risk Assessment**: ISO 27005-compliant risk analysis with configurable matrix
+- **Threat Modeling**: C4-decomposed, STRIDE-based threat identification with live transparency — System Context (trust boundaries), Container (zones), and Component (assets) analysis with real-time console broadcast
+- **Risk Assessment**: ISO 27005-compliant risk analysis with configurable matrix and IP reputation enrichment
 - **MITRE ATT&CK**: Automatic technique mapping with Navigator export
+- **Threat Intelligence**: Live feeds from CISA KEV, FIRST EPSS, cvefeed.io, abuse.ch (URLhaus/ThreatFox), crt.sh, AbuseIPDB, GreyNoise, and AlienVault OTX — with offline fallback
 - **Evidence Chain**: SHA-256 hash chain for tamper-evident audit trail
 - **AI Copilot**: Optional AI-assisted triage and remediation suggestions
 - **Reporting**: HTML/PDF reports with full evidence packages
@@ -54,6 +55,13 @@ Configuration files are in `config/`:
 - `mapping_rules.yaml` - MITRE ATT&CK mapping rules
 - `baselines.yaml` - Expected baseline configurations
 
+Environment variables for threat intelligence (optional):
+- `RISK_ABUSEIPDB_API_KEY` - AbuseIPDB API key
+- `RISK_GREYNOISE_API_KEY` - GreyNoise Community API key
+- `RISK_ALIENVAULT_OTX_API_KEY` - AlienVault OTX API key
+- `RISK_THREAT_FEED_MODE` - Feed mode: `live`, `offline`, or `fallback` (default)
+- `RISK_THREAT_FEED_CACHE_TTL` - Cache TTL in seconds (default: 3600)
+
 ## Project Structure
 ```
 ├── frontend/          # React + TypeScript (Vite)
@@ -72,6 +80,7 @@ Configuration files are in `config/`:
 | Backend | FastAPI, SQLAlchemy 2.0, Pydantic |
 | Database | SQLite (aiosqlite) |
 | Scanning | python-nmap, scapy, paramiko |
+| Threat Intel | httpx (CISA KEV, FIRST EPSS, cvefeed.io, abuse.ch, crt.sh, AbuseIPDB, GreyNoise, OTX) |
 | Reports | Jinja2, WeasyPrint |
 | MCP | Model Context Protocol (stdio transport) |
 

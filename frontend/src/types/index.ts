@@ -72,6 +72,8 @@ export interface Threat {
   linked_finding_ids: string[]
   confidence: number
   rationale: string | null
+  c4_level: 'system_context' | 'container' | 'component' | null
+  stride_category_detail: string | null
   created_at: string
   updated_at: string
 }

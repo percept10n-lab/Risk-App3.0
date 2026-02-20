@@ -1,5 +1,7 @@
+import re
+import time
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
 
@@ -16,7 +18,239 @@ import structlog
 
 logger = structlog.get_logger()
 
+# -- Singleton feed cache for reuse across endpoints --
+_feed_cache = None
+
+
+def _get_feed_cache():
+    global _feed_cache
+    if _feed_cache is None:
+        from mcp_servers.exploit_exposure.feeds import ThreatFeedCache
+        _feed_cache = ThreatFeedCache(
+            mode=settings.threat_feed_mode,
+            cache_ttl=settings.threat_feed_cache_ttl,
+        )
+    return _feed_cache
+
+
+def _get_ioc_client():
+    from mcp_servers.exploit_exposure.ioc_feeds import IoCFeedClient
+    return IoCFeedClient()
+
+
+def _get_ip_reputation_client():
+    from mcp_servers.exploit_exposure.ip_reputation import IPReputationClient
+    return IPReputationClient(
+        abuseipdb_key=settings.abuseipdb_api_key,
+        greynoise_key=settings.greynoise_api_key,
+        otx_key=settings.alienvault_otx_api_key,
+    )
+
 router = APIRouter()
+
+# ─── RSS Feed Cache ──────────────────────────────────────────────────────────
+_news_cache: dict = {"articles": [], "fetched_at": None, "source_count": 0}
+_news_cache_ttl = 1800  # 30 minutes
+_news_cache_time = 0.0
+
+RSS_FEEDS = [
+    ("SecurityWeek", "https://www.securityweek.com/feed/"),
+    ("The Hacker News", "https://feeds.feedburner.com/TheHackersNews"),
+    ("BleepingComputer", "https://www.bleepingcomputer.com/feed/"),
+]
+
+ISO27001_KEYWORD_MAP = {
+    "ransomware": [
+        {"control": "A.12.2", "name": "Malware Protection", "recommendation": "Ensure anti-malware controls are active and up-to-date on all endpoints."},
+        {"control": "A.12.3", "name": "Backup", "recommendation": "Verify backup integrity and test restore procedures. Ensure air-gapped backups exist."},
+    ],
+    "data breach": [
+        {"control": "A.18.1.4", "name": "Privacy and Protection of PII", "recommendation": "Review data classification and ensure encryption at rest and in transit."},
+        {"control": "A.16.1", "name": "Incident Management", "recommendation": "Verify incident response plan is current and conduct a tabletop exercise."},
+    ],
+    "phishing": [
+        {"control": "A.7.2.2", "name": "Information Security Awareness Training", "recommendation": "Conduct phishing awareness training for all users."},
+        {"control": "A.9.4.2", "name": "Secure Log-on Procedures", "recommendation": "Enable MFA on all accounts, especially admin and email."},
+    ],
+    "vulnerability": [
+        {"control": "A.12.6", "name": "Technical Vulnerability Management", "recommendation": "Run vulnerability scans and apply patches within SLA windows."},
+    ],
+    "cve": [
+        {"control": "A.12.6", "name": "Technical Vulnerability Management", "recommendation": "Check if any disclosed CVEs affect your assets and prioritize patching."},
+    ],
+    "patch": [
+        {"control": "A.12.6", "name": "Technical Vulnerability Management", "recommendation": "Review patch management processes and ensure timely deployment."},
+    ],
+    "iot": [
+        {"control": "A.13.1", "name": "Network Security Management", "recommendation": "Segment IoT devices on separate VLANs with restricted access."},
+        {"control": "A.14.1.2", "name": "Securing Application Services", "recommendation": "Disable unnecessary services and change default credentials on IoT devices."},
+    ],
+    "smart home": [
+        {"control": "A.13.1", "name": "Network Security Management", "recommendation": "Isolate smart home devices from critical network segments."},
+    ],
+    "router": [
+        {"control": "A.13.1", "name": "Network Security Management", "recommendation": "Ensure router firmware is up-to-date and admin interfaces are not exposed."},
+    ],
+    "firmware": [
+        {"control": "A.12.6", "name": "Technical Vulnerability Management", "recommendation": "Check for firmware updates on all network devices and appliances."},
+    ],
+    "credential": [
+        {"control": "A.9.2.4", "name": "Management of Secret Authentication Information", "recommendation": "Enforce strong password policies and enable MFA everywhere."},
+    ],
+    "password": [
+        {"control": "A.9.2.4", "name": "Management of Secret Authentication Information", "recommendation": "Review password policies, rotate compromised credentials immediately."},
+    ],
+    "zero-day": [
+        {"control": "A.12.6", "name": "Technical Vulnerability Management", "recommendation": "Monitor vendor advisories and apply mitigations for zero-day exploits immediately."},
+    ],
+    "malware": [
+        {"control": "A.12.2", "name": "Malware Protection", "recommendation": "Update malware signatures and scan all endpoints."},
+    ],
+}
+
+HOME_NETWORK_RISK_MAP = {
+    "ransomware": "Ransomware could encrypt NAS/file shares on your home network. Ensure backups are air-gapped and test restore procedures.",
+    "router": "Unpatched router firmware exposes all connected devices. Check for updates on your router admin panel.",
+    "firmware": "Unpatched firmware on network devices could allow attackers to gain persistent access to your network.",
+    "iot": "Compromised IoT devices could be used as botnet nodes or for lateral movement within your home network.",
+    "smart home": "Smart home devices with weak security can be entry points for attackers to access your entire network.",
+    "credential": "Default or weak credentials on home devices enable unauthorized access. Change all default passwords.",
+    "password": "Weak or reused passwords across home network services create risk of credential stuffing attacks.",
+    "phishing": "Phishing emails could compromise credentials for home network admin interfaces and cloud services.",
+    "data breach": "Leaked credentials from data breaches may include passwords used on your home network devices and services.",
+    "vpn": "VPN vulnerabilities could expose your home network to remote attacks. Keep VPN software updated.",
+    "dns": "DNS hijacking could redirect your home network traffic to malicious servers. Use encrypted DNS (DoH/DoT).",
+    "zero-day": "Zero-day vulnerabilities may affect software and devices on your home network before patches are available. Monitor advisories.",
+    "malware": "Malware could spread across devices on your home network. Ensure endpoint protection is active on all devices.",
+}
+
+
+def _strip_html(text: str) -> str:
+    """Remove HTML tags from text."""
+    return re.sub(r'<[^>]+>', '', text).strip()
+
+
+def _match_keywords(text: str) -> tuple[list[dict], str]:
+    """Match article text against keyword maps for ISO 27001 controls and home risk."""
+    text_lower = text.lower()
+    controls = []
+    seen_controls = set()
+    home_risk = ""
+
+    for keyword, keyword_controls in ISO27001_KEYWORD_MAP.items():
+        if keyword in text_lower:
+            for ctrl in keyword_controls:
+                if ctrl["control"] not in seen_controls:
+                    controls.append(ctrl)
+                    seen_controls.add(ctrl["control"])
+
+    if not controls:
+        controls = [{"control": "A.5.1", "name": "Information Security Policies", "recommendation": "Review your security policies in light of emerging threats."}]
+
+    for keyword, risk_text in HOME_NETWORK_RISK_MAP.items():
+        if keyword in text_lower:
+            home_risk = risk_text
+            break
+
+    if not home_risk:
+        home_risk = "Monitor your home network for indicators of compromise related to this threat."
+
+    return controls, home_risk
+
+
+def _extract_tag(item_xml: str, tag: str) -> str:
+    """Extract text content from an XML/RSS tag, handling CDATA sections."""
+    # Match <tag>...<![CDATA[...]]>...</tag> or <tag>text</tag>
+    pattern = re.compile(
+        rf'<{tag}[^>]*>(?:\s*<!\[CDATA\[(.*?)\]\]>\s*|(.*?))</{tag}>',
+        re.DOTALL
+    )
+    m = pattern.search(item_xml)
+    if not m:
+        return ""
+    raw = m.group(1) if m.group(1) is not None else (m.group(2) or "")
+    return raw.strip()
+
+
+async def _fetch_rss_feed(client: httpx.AsyncClient, source: str, url: str) -> list[dict]:
+    """Fetch and parse a single RSS feed using regex for maximum tolerance."""
+    articles = []
+    try:
+        resp = await client.get(url, follow_redirects=True)
+        resp.raise_for_status()
+        text = resp.text
+
+        # Split into <item>...</item> blocks
+        item_pattern = re.compile(r'<item\b[^>]*>(.*?)</item>', re.DOTALL)
+        items = item_pattern.findall(text)
+
+        for item_xml in items[:10]:
+            title = _strip_html(_extract_tag(item_xml, "title"))
+            if not title:
+                continue
+
+            link = _extract_tag(item_xml, "link")
+            published = _extract_tag(item_xml, "pubDate")
+            if not published:
+                published = _extract_tag(item_xml, "published")
+
+            raw_desc = _extract_tag(item_xml, "description")
+            if not raw_desc:
+                raw_desc = _extract_tag(item_xml, "summary")
+            summary = _strip_html(raw_desc) if raw_desc else ""
+            if len(summary) > 300:
+                summary = summary[:297] + "..."
+
+            combined_text = f"{title} {summary}"
+            iso_controls, home_risk = _match_keywords(combined_text)
+
+            articles.append({
+                "title": title,
+                "link": link,
+                "source": source,
+                "published": published,
+                "summary": summary,
+                "iso27001_controls": iso_controls,
+                "home_network_risk": home_risk,
+            })
+    except Exception as e:
+        logger.warning("Failed to fetch RSS feed", source=source, url=url, error=str(e))
+
+    return articles
+
+
+@router.get("/news")
+async def security_news():
+    """Fetch security news from RSS feeds with ISO 27001 recommendations."""
+    global _news_cache, _news_cache_time
+
+    # Return cached data if fresh
+    if _news_cache["articles"] and (time.time() - _news_cache_time) < _news_cache_ttl:
+        return _news_cache
+
+    all_articles = []
+    source_count = 0
+
+    async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": "RiskApp/3.0 SecurityNewsFetcher"}) as client:
+        for source, url in RSS_FEEDS:
+            articles = await _fetch_rss_feed(client, source, url)
+            if articles:
+                all_articles.extend(articles)
+                source_count += 1
+
+    # Sort by source diversity then recency
+    all_articles.sort(key=lambda a: a.get("published", ""), reverse=True)
+
+    result = {
+        "articles": all_articles[:30],  # Cap at 30 total
+        "fetched_at": datetime.utcnow().isoformat(),
+        "source_count": source_count,
+    }
+
+    _news_cache = result
+    _news_cache_time = time.time()
+
+    return result
 
 
 @router.get("/summary")
@@ -270,3 +504,77 @@ def _generate_template_brief(stats: dict) -> str:
         brief += "No critical or high-severity findings require immediate attention. Continue routine monitoring.\n"
 
     return brief
+
+
+# ─── Threat Intel Lookup Endpoints ────────────────────────────────────────────
+
+@router.get("/cve/{cve_id}")
+async def lookup_cve(cve_id: str = Path(..., description="CVE ID to look up")):
+    """Aggregated CVE lookup: KEV + EPSS + cvefeed.io."""
+    feed_cache = _get_feed_cache()
+    await feed_cache.ensure_kev_fresh()
+    await feed_cache.ensure_epss_fresh([cve_id])
+
+    kev = feed_cache.get_kev_status(cve_id)
+    epss = feed_cache.get_epss_score(cve_id)
+    cve_detail = await feed_cache.lookup_cve(cve_id)
+
+    return {
+        "cve_id": cve_id.upper(),
+        "kev": kev,
+        "epss": epss,
+        "nvd": cve_detail,
+        "in_kev": kev is not None,
+    }
+
+
+@router.get("/ip/{ip_address}")
+async def lookup_ip(ip_address: str = Path(..., description="IP address to check")):
+    """IP reputation lookup via AbuseIPDB, GreyNoise, OTX."""
+    client = _get_ip_reputation_client()
+    return await client.check_ip(ip_address)
+
+
+@router.get("/ioc/{indicator}")
+async def lookup_ioc(indicator: str = Path(..., description="IoC to search")):
+    """IoC lookup via URLhaus and ThreatFox."""
+    client = _get_ioc_client()
+    urlhaus = await client.query_urlhaus(indicator)
+    threatfox = await client.query_threatfox(indicator)
+    return {
+        "indicator": indicator,
+        "urlhaus": urlhaus,
+        "threatfox": threatfox,
+    }
+
+
+@router.get("/certs/{domain}")
+async def lookup_certs(domain: str = Path(..., description="Domain for cert transparency")):
+    """Certificate transparency lookup via crt.sh."""
+    client = _get_ioc_client()
+    certs = await client.query_crtsh(domain)
+    return {
+        "domain": domain,
+        "certificate_count": len(certs),
+        "certificates": certs,
+    }
+
+
+@router.get("/feed-status")
+async def feed_status():
+    """Current feed status: which feeds are active, counts, last refresh."""
+    feed_cache = _get_feed_cache()
+    stats = feed_cache.get_feed_stats()
+
+    # Check which API-key sources are configured
+    api_sources = {
+        "abuseipdb": bool(settings.abuseipdb_api_key),
+        "greynoise": bool(settings.greynoise_api_key),
+        "otx": bool(settings.alienvault_otx_api_key),
+    }
+
+    return {
+        **stats,
+        "api_sources": api_sources,
+        "free_sources": ["cisa_kev", "epss", "cvefeed", "urlhaus", "threatfox", "crtsh"],
+    }

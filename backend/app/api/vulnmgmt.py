@@ -69,6 +69,16 @@ async def create_from_findings(run_id: str | None = None, db: AsyncSession = Dep
     return await service.create_from_findings(run_id=run_id)
 
 
+@router.get("/finding/{finding_id}/enriched")
+async def get_enriched_finding(finding_id: str, db: AsyncSession = Depends(get_db)):
+    """Get finding with full context for vulnerability management."""
+    service = VulnMgmtService(db)
+    result = await service.get_enriched_finding(finding_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Finding not found")
+    return result
+
+
 @router.get("/{vuln_id}")
 async def get_vuln(vuln_id: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Vulnerability).where(Vulnerability.id == vuln_id))
