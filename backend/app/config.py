@@ -50,4 +50,9 @@ def load_yaml_config(filename: str) -> dict:
     if config_path.exists():
         with open(config_path, "r") as f:
             return yaml.safe_load(f) or {}
+    # Fallback: check project root config dir (parent of backend/)
+    alt_path = Path(__file__).resolve().parent.parent.parent / "config" / filename
+    if alt_path.exists():
+        with open(alt_path, "r") as f:
+            return yaml.safe_load(f) or {}
     return {}
