@@ -1,5 +1,8 @@
+import json
+import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
@@ -13,8 +16,16 @@ from app.schemas.threat import ThreatCreate, ThreatUpdate, ThreatResponse
 from app.schemas.common import PaginatedResponse
 from app.services.threat_service import ThreatService
 from app.services.pagination import paginate
+from app.evidence.artifact_store import ArtifactStore
+
+import structlog
+
+logger = structlog.get_logger()
 
 router = APIRouter()
+
+# In-memory report storage (keyed by report_id -> HTML string)
+_report_cache: dict[str, str] = {}
 
 
 @router.get("")
@@ -235,6 +246,160 @@ async def generate_threats(request: ThreatModelRequest, db: AsyncSession = Depen
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Threat generation failed: {str(e)}")
+
+
+class StandaloneThreatModelRequest(BaseModel):
+    asset_ids: list[str] | None = None
+    manual_target: str | None = None
+    run_risk_analysis: bool = True
+
+
+@router.post("/standalone-model")
+async def standalone_threat_model(request: StandaloneThreatModelRequest, db: AsyncSession = Depends(get_db)):
+    """Run standalone threat modeling with optional risk analysis and HTML report."""
+    try:
+        service = ThreatService(db)
+
+        # Resolve asset_ids from manual_target if provided
+        asset_ids = request.asset_ids
+        if request.manual_target and not asset_ids:
+            result = await db.execute(
+                select(Asset).where(Asset.ip_address == request.manual_target)
+            )
+            asset = result.scalar_one_or_none()
+            if asset:
+                asset_ids = [asset.id]
+
+        # Run threat modeling
+        tm_result = await service.run_full_threat_modeling(asset_ids=asset_ids)
+
+        # Gather data for the report
+        if asset_ids:
+            asset_result = await db.execute(select(Asset).where(Asset.id.in_(asset_ids)))
+        else:
+            asset_result = await db.execute(select(Asset))
+        assets = list(asset_result.scalars().all())
+
+        assets_data = [
+            {
+                "ip_address": a.ip_address,
+                "hostname": a.hostname,
+                "asset_type": a.asset_type,
+                "zone": a.zone,
+                "criticality": a.criticality,
+            }
+            for a in assets
+        ]
+
+        # Gather threats grouped by C4 level
+        threats_by_c4: dict[str, list] = {"system_context": [], "container": [], "component": []}
+        threat_result = await db.execute(
+            select(Threat).order_by(Threat.created_at.desc()).limit(500)
+        )
+        for t in threat_result.scalars().all():
+            level = t.c4_level or "component"
+            if level in threats_by_c4:
+                threats_by_c4[level].append({
+                    "title": t.title,
+                    "description": t.description,
+                    "threat_type": t.threat_type,
+                    "zone": t.zone,
+                    "confidence": t.confidence or 0,
+                })
+
+        # Optionally run risk analysis
+        risk_treatments = []
+        risk_result_data = None
+        if request.run_risk_analysis:
+            try:
+                from app.services.risk_analysis_service import RiskAnalysisService
+                risk_svc = RiskAnalysisService(db)
+                risk_result_data = await risk_svc.run_risk_analysis()
+                await db.commit()
+
+                # Gather risk treatments
+                from app.models.risk import Risk
+                risk_rows = await db.execute(
+                    select(Risk).order_by(Risk.risk_level.desc()).limit(50)
+                )
+                for r in risk_rows.scalars().all():
+                    risk_treatments.append({
+                        "scenario": r.scenario,
+                        "risk_level": r.risk_level,
+                        "treatment": r.treatment or "untreated",
+                        "rationale": "",
+                    })
+            except Exception as e:
+                logger.warning("Risk analysis in standalone threat model failed", error=str(e))
+
+        # Generate HTML report
+        try:
+            import sys, os
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+            from mcp_servers.reporting.threat_model_report import ThreatModelingReportGenerator
+
+            report_data = {
+                "summary": tm_result,
+                "threats_by_c4": threats_by_c4,
+                "threats_by_stride": tm_result.get("by_stride", {}),
+                "assets_analyzed": assets_data,
+                "risk_treatments": risk_treatments,
+            }
+            html_report = ThreatModelingReportGenerator.generate(report_data)
+            report_id = str(uuid.uuid4())
+            _report_cache[report_id] = html_report
+
+            # Store as artifact
+            artifact_store = ArtifactStore(db)
+            await artifact_store.store(
+                content=html_report,
+                artifact_type="report",
+                tool_name="threat_model_report",
+                target="standalone",
+                command="standalone_threat_model",
+                parameters={"asset_ids": asset_ids},
+            )
+            await db.commit()
+        except Exception as e:
+            logger.error("Report generation failed", error=str(e))
+            report_id = None
+
+        return {
+            "status": "completed",
+            **tm_result,
+            "risk_analysis": risk_result_data if request.run_risk_analysis else None,
+            "report_id": report_id,
+        }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Standalone threat modeling failed: {str(e)}")
+
+
+@router.get("/report/{report_id}/download")
+async def download_threat_report(report_id: str):
+    """Download a generated threat modeling HTML report."""
+    html_content = _report_cache.get(report_id)
+    if not html_content:
+        raise HTTPException(status_code=404, detail="Report not found or expired")
+    return HTMLResponse(
+        content=html_content,
+        headers={
+            "Content-Disposition": f'attachment; filename="threat-model-report-{report_id[:8]}.html"',
+        },
+    )
+
+
+@router.get("/report/{report_id}/view")
+async def view_threat_report(report_id: str):
+    """View a generated threat modeling HTML report in the browser."""
+    html_content = _report_cache.get(report_id)
+    if not html_content:
+        raise HTTPException(status_code=404, detail="Report not found or expired")
+    return HTMLResponse(content=html_content)
 
 
 @router.post("/zone-analysis")

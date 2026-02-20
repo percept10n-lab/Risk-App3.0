@@ -128,6 +128,49 @@ COPILOT_TOOLS: list[ToolDefinition] = [
             "required": [],
         },
     ),
+    # --- Intelligence Lookup tools (read-only) ---
+    ToolDefinition(
+        name="lookup_cve",
+        description="Look up a CVE by ID. Returns KEV status, EPSS exploitation probability, and NVD/CVSS details.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "cve_id": {"type": "string", "description": "CVE identifier (e.g. CVE-2024-3400)"},
+            },
+            "required": ["cve_id"],
+        },
+    ),
+    ToolDefinition(
+        name="lookup_ip_reputation",
+        description="Look up IP reputation. Returns AbuseIPDB, GreyNoise, and OTX risk scores.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "ip_address": {"type": "string", "description": "IP address to look up"},
+            },
+            "required": ["ip_address"],
+        },
+    ),
+    ToolDefinition(
+        name="search_ioc",
+        description="Search for an indicator of compromise (IP, domain, hash) in URLhaus and ThreatFox feeds.",
+        parameters={
+            "type": "object",
+            "properties": {
+                "indicator": {"type": "string", "description": "IoC value (IP, domain, URL, or hash)"},
+            },
+            "required": ["indicator"],
+        },
+    ),
+    ToolDefinition(
+        name="get_feed_status",
+        description="Get threat intelligence feed health and configuration status. Shows KEV/EPSS counts and API key status.",
+        parameters={
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    ),
     # --- Write tools (require user confirmation) ---
     ToolDefinition(
         name="update_finding_status",
@@ -540,6 +583,80 @@ class ToolExecutor:
             }
             for m in mappings
         ]
+
+    # --- Intelligence Lookup tools ---
+
+    async def _tool_lookup_cve(self, cve_id: str) -> dict:
+        """Look up CVE details from KEV, EPSS, and NVD feeds."""
+        try:
+            from app.api.intel import _get_feed_cache
+            cache = _get_feed_cache()
+            result: dict = {"cve_id": cve_id}
+
+            # KEV check
+            kev_entry = cache.lookup_kev(cve_id)
+            result["in_kev"] = kev_entry is not None
+            if kev_entry:
+                result["kev"] = kev_entry
+
+            # EPSS score
+            epss = cache.lookup_epss(cve_id)
+            if epss:
+                result["epss"] = epss
+
+            # NVD/CVSS details
+            nvd = await cache.lookup_nvd(cve_id)
+            if nvd:
+                result["nvd"] = nvd
+
+            return result
+        except Exception as e:
+            logger.error("CVE lookup failed", cve_id=cve_id, error=str(e))
+            return {"error": f"CVE lookup failed: {e}", "cve_id": cve_id}
+
+    async def _tool_lookup_ip_reputation(self, ip_address: str) -> dict:
+        """Look up IP reputation from AbuseIPDB, GreyNoise, and OTX."""
+        try:
+            from app.api.intel import _get_ip_reputation_client
+            client = _get_ip_reputation_client()
+            result = await client.lookup(ip_address)
+            return result
+        except Exception as e:
+            logger.error("IP reputation lookup failed", ip=ip_address, error=str(e))
+            return {"error": f"IP reputation lookup failed: {e}", "ip": ip_address}
+
+    async def _tool_search_ioc(self, indicator: str) -> dict:
+        """Search for IoC in URLhaus and ThreatFox."""
+        try:
+            from app.api.intel import _get_ioc_client
+            client = _get_ioc_client()
+            result = await client.search(indicator)
+            return {"indicator": indicator, **result}
+        except Exception as e:
+            logger.error("IoC search failed", indicator=indicator, error=str(e))
+            return {"error": f"IoC search failed: {e}", "indicator": indicator}
+
+    async def _tool_get_feed_status(self) -> dict:
+        """Get threat intelligence feed health and configuration status."""
+        try:
+            from app.api.intel import _get_feed_cache
+            from app.config import settings
+            cache = _get_feed_cache()
+            return {
+                "kev_count": len(cache.kev_data) if hasattr(cache, "kev_data") else 0,
+                "epss_count": len(cache.epss_data) if hasattr(cache, "epss_data") else 0,
+                "cve_cached": len(cache.nvd_cache) if hasattr(cache, "nvd_cache") else 0,
+                "mode": getattr(settings, "threat_feed_mode", "free"),
+                "free_sources": ["CISA KEV", "FIRST EPSS", "NVD", "URLhaus", "ThreatFox"],
+                "api_sources": {
+                    "AbuseIPDB": bool(getattr(settings, "abuseipdb_api_key", "")),
+                    "GreyNoise": bool(getattr(settings, "greynoise_api_key", "")),
+                    "AlienVault OTX": bool(getattr(settings, "alienvault_otx_api_key", "")),
+                },
+            }
+        except Exception as e:
+            logger.error("Feed status check failed", error=str(e))
+            return {"error": f"Feed status check failed: {e}"}
 
     # --- Write tools (return pending_confirmation) ---
 

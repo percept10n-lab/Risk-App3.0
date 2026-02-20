@@ -48,6 +48,10 @@ export const threatsApi = {
   zoneAnalysis: (data: { zone: string; run_id?: string }) =>
     api.post('/threats/zone-analysis', data),
   stats: () => api.get('/threats/stats'),
+  standaloneThreatModel: (data: { asset_ids?: string[]; manual_target?: string; run_risk_analysis?: boolean }) =>
+    api.post('/threats/standalone-model', data),
+  downloadThreatReport: (reportId: string) => api.get(`/threats/report/${reportId}/download`, { responseType: 'blob' }),
+  viewThreatReport: (reportId: string) => api.get(`/threats/report/${reportId}/view`, { responseType: 'text' }),
 }
 
 // Vuln Scan

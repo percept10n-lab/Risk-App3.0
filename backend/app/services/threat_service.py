@@ -214,9 +214,16 @@ class ThreatService:
         return threat, True
 
     async def run_full_threat_modeling(
-        self, run_id: str | None = None, broadcast_fn=None
+        self, run_id: str | None = None, broadcast_fn=None,
+        asset_ids: list[str] | None = None,
     ) -> dict:
-        """Run full C4-decomposed threat modeling with STRIDE analysis."""
+        """Run full C4-decomposed threat modeling with STRIDE analysis.
+
+        Args:
+            run_id: Optional run ID for tracking.
+            broadcast_fn: Optional async callback for progress messages.
+            asset_ids: Optional list of asset IDs to limit analysis to.
+        """
         try:
             from mcp_servers.threat_modeling.rules import ThreatRuleEngine
         except ImportError:
@@ -227,7 +234,7 @@ class ThreatService:
             from mcp_servers.threat_modeling.rules import ThreatRuleEngine
         from collections import Counter
 
-        logger.info("Starting full C4 threat modeling", run_id=run_id)
+        logger.info("Starting full C4 threat modeling", run_id=run_id, asset_ids=asset_ids)
 
         await self.audit_trail.log(
             event_type="step_start", entity_type="run",
@@ -270,7 +277,10 @@ class ThreatService:
         await self.db.flush()
 
         # --- C4 Level 2: Container — Zone Analysis ---
-        result = await self.db.execute(select(Asset))
+        if asset_ids:
+            result = await self.db.execute(select(Asset).where(Asset.id.in_(asset_ids)))
+        else:
+            result = await self.db.execute(select(Asset))
         all_assets = list(result.scalars().all())
 
         # Group assets by zone

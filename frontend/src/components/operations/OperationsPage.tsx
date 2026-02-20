@@ -4,10 +4,12 @@ import WorkflowPage from '../workflow/WorkflowPage'
 import PentestPage from '../pentest/PentestPage'
 import NmapPage from '../nmap/NmapPage'
 import DriftPage from '../drift/DriftPage'
-import { PlayCircle, Swords, Radar, GitCompare } from 'lucide-react'
+import ThreatModelingTab from './ThreatModelingTab'
+import { PlayCircle, Swords, Radar, GitCompare, ShieldAlert } from 'lucide-react'
 
 const tabs = [
   { id: 'workflow', label: 'Workflow', icon: PlayCircle },
+  { id: 'threat-modeling', label: 'Threat Modeling', icon: ShieldAlert },
   { id: 'pentest', label: 'Pentest', icon: Swords },
   { id: 'nmap', label: 'Nmap Scanner', icon: Radar },
   { id: 'drift', label: 'Drift Monitor', icon: GitCompare },
@@ -46,6 +48,7 @@ export default function OperationsPage() {
       </div>
 
       {activeTab === 'workflow' && <WorkflowPage embedded />}
+      {activeTab === 'threat-modeling' && <ThreatModelingTab embedded />}
       {activeTab === 'pentest' && <PentestPage embedded />}
       {activeTab === 'nmap' && <NmapPage embedded />}
       {activeTab === 'drift' && <DriftPage embedded />}

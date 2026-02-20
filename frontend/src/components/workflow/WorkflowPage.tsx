@@ -13,7 +13,6 @@ const STEPS = [
   { key: 'fingerprinting', label: 'Fingerprinting', description: 'Identify services and OS' },
   { key: 'vuln_scanning', label: 'Vulnerability Scanning', description: 'Check for known vulnerabilities' },
   { key: 'exploit_analysis', label: 'Exploit Analysis', description: 'Assess exploitability of findings' },
-  { key: 'threat_modeling', label: 'Threat Modeling', description: 'Model threats based on findings & assets' },
   { key: 'mitre_mapping', label: 'MITRE Mapping', description: 'Map findings & threats to ATT&CK' },
   { key: 'risk_analysis', label: 'Risk Analysis', description: 'Calculate risk levels (ISO 27005)' },
   { key: 'baseline', label: 'Baseline Snapshot', description: 'Create drift detection baseline' },

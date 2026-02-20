@@ -29,7 +29,7 @@ router = APIRouter()
 
 PIPELINE_STEPS = [
     "discovery", "fingerprinting", "vuln_scanning", "exploit_analysis",
-    "threat_modeling", "mitre_mapping", "risk_analysis", "baseline",
+    "mitre_mapping", "risk_analysis", "baseline",
 ]
 
 
@@ -65,7 +65,6 @@ async def _execute_pipeline(run_id: str, scope: dict):
     """Execute the full assessment pipeline in the background."""
     import asyncio
     from app.services.discovery_service import DiscoveryService, FingerprintService
-    from app.services.threat_service import ThreatService
     from app.services.vuln_scan_service import VulnScanService
     from app.services.exploit_service import ExploitEnrichmentService
     from app.services.mitre_service import MitreService
@@ -79,7 +78,6 @@ async def _execute_pipeline(run_id: str, scope: dict):
     STEP_TIMEOUTS = {
         "discovery": 90,
         "fingerprinting": 90,
-        "threat_modeling": 60,
         "vuln_scanning": 120,
         "exploit_analysis": 30,
         "mitre_mapping": 30,
@@ -90,7 +88,6 @@ async def _execute_pipeline(run_id: str, scope: dict):
     STEP_LABELS = {
         "discovery": ("Asset Discovery", "Scanning {subnet} for live hosts..."),
         "fingerprinting": ("Fingerprinting", "Identifying services and OS on discovered hosts..."),
-        "threat_modeling": ("Threat Modeling", "Analyzing threats using STRIDE methodology..."),
         "vuln_scanning": ("Vulnerability Scanning", "Running vulnerability checks on assets..."),
         "exploit_analysis": ("Exploit Analysis", "Assessing exploitability of findings..."),
         "mitre_mapping": ("MITRE Mapping", "Mapping findings to ATT&CK techniques..."),
@@ -160,33 +157,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
             ea_count = ea_result.get("enriched", "?") if isinstance(ea_result, dict) else "?"
             await _broadcast(run_id, "step_complete", f"Exploit analysis complete — {ea_count} findings enriched", step="exploit_analysis")
 
-            # Step 5: Threat Modeling (C4 decomposition)
-            await _update_run_step(db, run_id, "threat_modeling", completed_steps)
-            await _broadcast(run_id, "step_start", STEP_LABELS["threat_modeling"][1], step="threat_modeling")
-            logger.info("Pipeline step: threat_modeling", run_id=run_id)
-            threat_svc = ThreatService(db)
-
-            async def threat_broadcast(msg):
-                await _broadcast(run_id, "step_detail", msg, step="threat_modeling")
-
-            tm_result = await _run_step_with_timeout(
-                threat_svc.run_full_threat_modeling(run_id=run_id, broadcast_fn=threat_broadcast),
-                "threat_modeling", STEP_TIMEOUTS["threat_modeling"], run_id=run_id,
-            )
-            await db.commit()
-            completed_steps.append("threat_modeling")
-            if isinstance(tm_result, dict):
-                tm_count = tm_result.get("threats_created", "?")
-                stride = tm_result.get("by_stride", {})
-                stride_str = " ".join(f"{k[0].upper()}:{v}" for k, v in sorted(stride.items())) if stride else ""
-                msg = f"Threat modeling complete — {tm_count} threats"
-                if stride_str:
-                    msg += f" ({stride_str})"
-            else:
-                msg = "Threat modeling complete"
-            await _broadcast(run_id, "step_complete", msg, step="threat_modeling")
-
-            # Step 6: MITRE Mapping
+            # Step 5: MITRE Mapping
             await _update_run_step(db, run_id, "mitre_mapping", completed_steps)
             await _broadcast(run_id, "step_start", STEP_LABELS["mitre_mapping"][1], step="mitre_mapping")
             logger.info("Pipeline step: mitre_mapping", run_id=run_id)
@@ -250,7 +221,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
                 run.completed_at = datetime.utcnow()
                 await db.commit()
             logger.info("Pipeline completed", run_id=run_id)
-            await _broadcast(run_id, "pipeline_complete", f"Pipeline finished — {len(completed_steps)}/8 steps completed", steps_completed=completed_steps)
+            await _broadcast(run_id, "pipeline_complete", f"Pipeline finished — {len(completed_steps)}/7 steps completed", steps_completed=completed_steps)
 
         except Exception as e:
             logger.error("Pipeline failed", run_id=run_id, error=str(e), step=completed_steps[-1] if completed_steps else "init")
