@@ -20,6 +20,7 @@ class RunResponse(BaseModel):
     completed_at: datetime | None = None
     triggered_by: str
     config_snapshot: dict | None = None
+    report_id: str | None = None
     created_at: datetime
 
     class Config:

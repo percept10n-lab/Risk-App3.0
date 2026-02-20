@@ -29,7 +29,7 @@ router = APIRouter()
 
 PIPELINE_STEPS = [
     "discovery", "fingerprinting", "vuln_scanning", "exploit_analysis",
-    "mitre_mapping", "risk_analysis", "baseline",
+    "mitre_mapping", "threat_modeling", "risk_analysis", "baseline", "reporting",
 ]
 
 
@@ -61,13 +61,126 @@ async def _run_step_with_timeout(coro, step_name: str, timeout: int = 120, run_i
         raise
 
 
+async def _generate_pipeline_report(db: AsyncSession, run_id: str) -> str:
+    """Generate an HTML report for a completed pipeline run, returns report_id."""
+    import uuid as _uuid
+    from app.models.asset import Asset
+    from app.models.finding import Finding
+    from app.models.risk import Risk
+    from app.models.threat import Threat
+    from app.models.mitre_mapping import MitreMapping
+    from app.evidence.artifact_store import ArtifactStore
+
+    try:
+        from mcp_servers.reporting.html_report import HTMLReportGenerator
+    except ImportError:
+        import sys
+        from pathlib import Path
+        project_root = str(Path(__file__).resolve().parents[3])
+        if project_root not in sys.path:
+            sys.path.insert(0, project_root)
+        from mcp_servers.reporting.html_report import HTMLReportGenerator
+
+    REPORT_LIMIT = 5000
+
+    assets_result = await db.execute(select(Asset).order_by(Asset.ip_address).limit(REPORT_LIMIT))
+    assets = [
+        {
+            "ip_address": a.ip_address, "hostname": a.hostname,
+            "asset_type": a.asset_type, "zone": a.zone,
+            "criticality": a.criticality, "os_guess": a.os_guess,
+            "vendor": a.vendor, "open_ports": a.open_ports or [],
+        }
+        for a in assets_result.scalars().all()
+    ]
+
+    findings_result = await db.execute(select(Finding).order_by(Finding.severity.desc()).limit(REPORT_LIMIT))
+    findings = [
+        {
+            "title": f.title, "severity": f.severity,
+            "category": f.category, "description": f.description,
+            "source_tool": f.source_tool, "source_check": getattr(f, "source_check", ""),
+            "remediation": f.remediation,
+            "evidence": f.raw_output_snippet, "status": f.status,
+            "cve_ids": f.cve_ids or [],
+        }
+        for f in findings_result.scalars().all()
+    ]
+
+    risks_result = await db.execute(select(Risk).order_by(Risk.risk_level.desc()).limit(REPORT_LIMIT))
+    risks = [
+        {
+            "scenario": r.scenario, "likelihood": r.likelihood,
+            "impact": r.impact, "risk_level": r.risk_level,
+            "treatment": r.treatment, "status": r.status,
+            "recommended_treatment": r.treatment,
+        }
+        for r in risks_result.scalars().all()
+    ]
+
+    threats_result = await db.execute(select(Threat).order_by(Threat.c4_level, Threat.confidence.desc()).limit(REPORT_LIMIT))
+    threats = [
+        {
+            "title": t.title, "description": t.description,
+            "threat_type": t.threat_type, "zone": t.zone,
+            "confidence": t.confidence, "c4_level": t.c4_level or "component",
+            "stride_category_detail": t.stride_category_detail,
+            "trust_boundary": t.trust_boundary,
+        }
+        for t in threats_result.scalars().all()
+    ]
+
+    mitre_result = await db.execute(select(MitreMapping).limit(REPORT_LIMIT))
+    mitre_mappings = [
+        {
+            "technique_id": m.technique_id, "technique_name": m.technique_name,
+            "tactic": m.tactic, "confidence": m.confidence,
+        }
+        for m in mitre_result.scalars().all()
+    ]
+
+    report_data = {
+        "assets": assets,
+        "findings": findings,
+        "risks": risks,
+        "threats": threats,
+        "mitre_mappings": mitre_mappings,
+        "metadata": {
+            "run_id": run_id,
+            "timestamp": datetime.utcnow().isoformat(),
+            "scope": "Full pipeline assessment",
+        },
+    }
+
+    generator = HTMLReportGenerator()
+    html_content = generator.generate(report_data)
+
+    report_id = str(_uuid.uuid4())
+    artifact_store = ArtifactStore(db)
+    await artifact_store.store(
+        content=html_content,
+        artifact_type="report",
+        tool_name="report_generator",
+        target="full_report",
+        run_id=run_id,
+        command="pipeline_report_generation",
+        parameters={"report_type": "html", "report_id": report_id},
+    )
+    await db.commit()
+
+    logger.info("Pipeline report generated", run_id=run_id, report_id=report_id)
+    return report_id
+
+
 async def _execute_pipeline(run_id: str, scope: dict):
     """Execute the full assessment pipeline in the background."""
     import asyncio
+    import uuid
     from app.services.discovery_service import DiscoveryService, FingerprintService
     from app.services.vuln_scan_service import VulnScanService
     from app.services.exploit_service import ExploitEnrichmentService
     from app.services.mitre_service import MitreService
+    from app.services.threat_service import ThreatService
     from app.services.risk_analysis_service import RiskAnalysisService
     from app.services.drift_service import DriftService
 
@@ -81,8 +194,10 @@ async def _execute_pipeline(run_id: str, scope: dict):
         "vuln_scanning": 120,
         "exploit_analysis": 30,
         "mitre_mapping": 30,
+        "threat_modeling": 60,
         "risk_analysis": 30,
         "baseline": 15,
+        "reporting": 60,
     }
 
     STEP_LABELS = {
@@ -91,8 +206,10 @@ async def _execute_pipeline(run_id: str, scope: dict):
         "vuln_scanning": ("Vulnerability Scanning", "Running vulnerability checks on assets..."),
         "exploit_analysis": ("Exploit Analysis", "Assessing exploitability of findings..."),
         "mitre_mapping": ("MITRE Mapping", "Mapping findings to ATT&CK techniques..."),
+        "threat_modeling": ("Threat Modeling", "Running C4/STRIDE threat analysis..."),
         "risk_analysis": ("Risk Analysis", "Calculating risk levels for all scenarios..."),
         "baseline": ("Baseline Snapshot", "Creating drift detection baseline..."),
+        "reporting": ("Report Generation", "Generating assessment report..."),
     }
 
     async with async_session() as db:
@@ -171,6 +288,24 @@ async def _execute_pipeline(run_id: str, scope: dict):
             mm_count = mm_result.get("mappings_created", "?") if isinstance(mm_result, dict) else "?"
             await _broadcast(run_id, "step_complete", f"MITRE mapping complete — {mm_count} techniques mapped", step="mitre_mapping")
 
+            # Step 6: Threat Modeling
+            await _update_run_step(db, run_id, "threat_modeling", completed_steps)
+            await _broadcast(run_id, "step_start", STEP_LABELS["threat_modeling"][1], step="threat_modeling")
+            logger.info("Pipeline step: threat_modeling", run_id=run_id)
+            threat_svc = ThreatService(db)
+
+            async def _threat_broadcast(msg: str):
+                await _broadcast(run_id, "step_detail", msg, step="threat_modeling")
+
+            tm_result = await _run_step_with_timeout(
+                threat_svc.run_full_threat_modeling(run_id=run_id, broadcast_fn=_threat_broadcast),
+                "threat_modeling", STEP_TIMEOUTS["threat_modeling"], run_id=run_id,
+            )
+            await db.commit()
+            completed_steps.append("threat_modeling")
+            tm_count = tm_result.get("threats_created", "?") if isinstance(tm_result, dict) else "?"
+            await _broadcast(run_id, "step_complete", f"Threat modeling complete — {tm_count} threats identified", step="threat_modeling")
+
             # Step 7: Risk Analysis
             await _update_run_step(db, run_id, "risk_analysis", completed_steps)
             await _broadcast(run_id, "step_start", STEP_LABELS["risk_analysis"][1], step="risk_analysis")
@@ -211,6 +346,16 @@ async def _execute_pipeline(run_id: str, scope: dict):
             except Exception as e:
                 logger.warning("Pipeline stale cleanup failed", error=str(e))
 
+            # Step 9: Report Generation
+            await _update_run_step(db, run_id, "reporting", completed_steps)
+            await _broadcast(run_id, "step_start", STEP_LABELS["reporting"][1], step="reporting")
+            logger.info("Pipeline step: reporting", run_id=run_id)
+
+            report_id = await _generate_pipeline_report(db, run_id)
+
+            completed_steps.append("reporting")
+            await _broadcast(run_id, "step_complete", "Assessment report generated", step="reporting")
+
             # Complete
             result = await db.execute(select(Run).where(Run.id == run_id))
             run = result.scalar_one_or_none()
@@ -219,9 +364,10 @@ async def _execute_pipeline(run_id: str, scope: dict):
                 run.current_step = "completed"
                 run.steps_completed = completed_steps
                 run.completed_at = datetime.utcnow()
+                run.report_id = report_id
                 await db.commit()
-            logger.info("Pipeline completed", run_id=run_id)
-            await _broadcast(run_id, "pipeline_complete", f"Pipeline finished — {len(completed_steps)}/7 steps completed", steps_completed=completed_steps)
+            logger.info("Pipeline completed", run_id=run_id, report_id=report_id)
+            await _broadcast(run_id, "pipeline_complete", f"Pipeline finished — {len(completed_steps)}/{len(PIPELINE_STEPS)} steps completed", steps_completed=completed_steps, report_id=report_id)
 
         except Exception as e:
             logger.error("Pipeline failed", run_id=run_id, error=str(e), step=completed_steps[-1] if completed_steps else "init")

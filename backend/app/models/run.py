@@ -28,4 +28,5 @@ class Run(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     triggered_by: Mapped[str] = mapped_column(String(100), default="user")
     config_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=dict)
+    report_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())

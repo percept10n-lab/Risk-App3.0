@@ -138,6 +138,7 @@ class HTMLReportGenerator:
         assets = data.get("assets", [])
         findings = data.get("findings", [])
         risks = data.get("risks", [])
+        threats = data.get("threats", [])
         mitre_mappings = data.get("mitre_mappings", [])
         metadata = data.get("metadata", {})
 
@@ -149,6 +150,7 @@ class HTMLReportGenerator:
             self._section_executive_summary(assets, findings, risks, metadata),
             self._section_asset_inventory(assets),
             self._section_findings(findings),
+            self._section_threats(threats),
             self._section_risk_register(risks),
             self._section_mitre(mitre_mappings),
             self._section_audit_trail(metadata),
@@ -362,6 +364,115 @@ class HTMLReportGenerator:
                     f"{remediation_block}"
                     f"{evidence_block}"
                     f"</div>"
+                )
+
+            html_parts.append("</div>")
+
+        return "\n".join(html_parts)
+
+    def _section_threats(self, threats: list) -> str:
+        if not threats:
+            return ""
+
+        # STRIDE colour mapping
+        STRIDE_COLORS = {
+            "spoofing": "#7c3aed",
+            "tampering": "#dc2626",
+            "repudiation": "#d97706",
+            "information_disclosure": "#2563eb",
+            "denial_of_service": "#ea580c",
+            "elevation_of_privilege": "#059669",
+        }
+
+        def _stride_badge(stride_type: str) -> str:
+            st = stride_type.lower() if stride_type else "unknown"
+            color = STRIDE_COLORS.get(st, "#6b7280")
+            label = st.replace("_", " ").title()
+            return (
+                f'<span style="display:inline-block;padding:2px 10px;border-radius:9999px;'
+                f'font-size:0.7rem;font-weight:600;color:#fff;background:{color};">'
+                f'{_esc(label)}</span>'
+            )
+
+        def _confidence_bar(confidence: float) -> str:
+            pct = int((confidence or 0) * 100)
+            color = "#dc2626" if pct >= 80 else "#d97706" if pct >= 50 else "#2563eb"
+            return (
+                f'<div style="display:inline-flex;align-items:center;gap:6px;">'
+                f'<div style="width:60px;height:6px;background:#e2e8f0;border-radius:3px;overflow:hidden;">'
+                f'<div style="width:{pct}%;height:100%;background:{color};border-radius:3px;"></div>'
+                f'</div>'
+                f'<span style="font-size:0.75rem;color:#64748b;">{pct}%</span>'
+                f'</div>'
+            )
+
+        # STRIDE summary counts
+        from collections import Counter
+        stride_counts = Counter(
+            (t.get("threat_type") or "unknown").lower() for t in threats
+        )
+        stride_pills = ""
+        for st in ["spoofing", "tampering", "repudiation", "information_disclosure", "denial_of_service", "elevation_of_privilege"]:
+            count = stride_counts.get(st, 0)
+            if count > 0:
+                stride_pills += f" {_stride_badge(st)} &times; {count} &nbsp;"
+        for st, count in stride_counts.items():
+            if st not in STRIDE_COLORS:
+                stride_pills += (
+                    f' <span style="display:inline-block;padding:2px 10px;border-radius:9999px;'
+                    f'font-size:0.7rem;font-weight:600;color:#fff;background:#6b7280;">'
+                    f'{_esc(st.replace("_", " ").title())}</span> &times; {count} &nbsp;'
+                )
+
+        html_parts = [
+            '<h2>Threat Analysis</h2>',
+            f'<div class="card"><p><strong>STRIDE breakdown:</strong> {stride_pills if stride_pills else "None"}</p>'
+            f'<p style="margin-top:4px;color:#64748b;font-size:0.85rem;">{len(threats)} threats identified across C4 decomposition levels</p></div>',
+        ]
+
+        # Group by C4 level
+        C4_ORDER = ["system_context", "container", "component"]
+        C4_LABELS = {
+            "system_context": "System Context",
+            "container": "Container",
+            "component": "Component",
+        }
+
+        grouped: dict[str, list] = {}
+        for t in threats:
+            level = (t.get("c4_level") or "component").lower()
+            grouped.setdefault(level, []).append(t)
+
+        for level in C4_ORDER:
+            group = grouped.get(level, [])
+            if not group:
+                continue
+
+            html_parts.append(
+                f'<div class="finding-group">'
+                f'<h3 style="margin-top:16px;">C4: {_esc(C4_LABELS.get(level, level))} ({len(group)})</h3>'
+            )
+
+            for t in group:
+                zone_info = ""
+                if t.get("zone"):
+                    zone_info = f' <span style="color:#64748b;font-size:0.8rem;">Zone: {_esc(t["zone"])}</span>'
+                elif t.get("trust_boundary"):
+                    zone_info = f' <span style="color:#64748b;font-size:0.8rem;">Boundary: {_esc(t["trust_boundary"])}</span>'
+
+                detail = ""
+                if t.get("stride_category_detail"):
+                    detail = f'<p style="margin-top:4px;font-size:0.85rem;color:#475569;">{_esc(t["stride_category_detail"])}</p>'
+
+                html_parts.append(
+                    f'<div class="card" style="border-left:4px solid {STRIDE_COLORS.get((t.get("threat_type") or "").lower(), "#6b7280")};">'
+                    f'<p><strong>{_esc(t.get("title", "Untitled"))}</strong>'
+                    f' {_stride_badge(t.get("threat_type", "unknown"))}'
+                    f'{zone_info}</p>'
+                    f'<p style="margin-top:4px;color:#475569;">{_esc(t.get("description", ""))}</p>'
+                    f'{detail}'
+                    f'<p style="margin-top:6px;">Confidence: {_confidence_bar(t.get("confidence", 0))}</p>'
+                    f'</div>'
                 )
 
             html_parts.append("</div>")

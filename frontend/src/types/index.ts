@@ -140,6 +140,7 @@ export interface Run {
   completed_at: string | null
   triggered_by: string
   config_snapshot: Record<string, any>
+  report_id: string | null
   created_at: string
 }
 

@@ -97,6 +97,12 @@ async def init_db():
         except Exception:
             pass
 
+        # Add report_id to runs table
+        try:
+            await conn.execute(text("ALTER TABLE runs ADD COLUMN report_id VARCHAR(36)"))
+        except Exception:
+            pass
+
         # Backfill c4_level for existing threats that have NULL
         await conn.execute(text(
             "UPDATE threats SET c4_level = 'component' "

@@ -4,7 +4,7 @@ import Badge from '../common/Badge'
 import NmapConsole from '../nmap/NmapConsole'
 import { useRunStore } from '../../stores/runStore'
 import { useAssetStore } from '../../stores/assetStore'
-import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle, Network, Server, Globe, Search, X } from 'lucide-react'
+import { Play, Pause, Square, CheckCircle2, Circle, Loader2, AlertTriangle, Network, Server, Globe, Search, X, FileText, Download } from 'lucide-react'
 
 type WorkflowMode = 'cidr' | 'existing' | 'ip'
 
@@ -14,8 +14,10 @@ const STEPS = [
   { key: 'vuln_scanning', label: 'Vulnerability Scanning', description: 'Check for known vulnerabilities' },
   { key: 'exploit_analysis', label: 'Exploit Analysis', description: 'Assess exploitability of findings' },
   { key: 'mitre_mapping', label: 'MITRE Mapping', description: 'Map findings & threats to ATT&CK' },
+  { key: 'threat_modeling', label: 'Threat Modeling', description: 'C4/STRIDE threat analysis' },
   { key: 'risk_analysis', label: 'Risk Analysis', description: 'Calculate risk levels (ISO 27005)' },
   { key: 'baseline', label: 'Baseline Snapshot', description: 'Create drift detection baseline' },
+  { key: 'reporting', label: 'Report Generation', description: 'Generate assessment report' },
 ]
 
 interface WsMessage {
@@ -24,6 +26,7 @@ interface WsMessage {
   step?: string
   timestamp?: string
   steps_completed?: string[]
+  report_id?: string
 }
 
 export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
@@ -37,6 +40,7 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
   const [showAssetPicker, setShowAssetPicker] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [consoleLines, setConsoleLines] = useState<string[]>([])
+  const [reportId, setReportId] = useState<string | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -50,12 +54,15 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
     }
   }, [])
 
-  // Close WS when run finishes
+  // Close WS when run finishes; pick up report_id from run data
   useEffect(() => {
     if (activeRun && ['completed', 'failed', 'cancelled'].includes(activeRun.status)) {
       wsRef.current?.close()
     }
-  }, [activeRun?.status])
+    if (activeRun?.report_id) {
+      setReportId(activeRun.report_id)
+    }
+  }, [activeRun?.status, activeRun?.report_id])
 
   const connectWebSocket = useCallback((runId: string) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -112,6 +119,7 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
         break
       case 'pipeline_complete':
         setConsoleLines(prev => [...prev, '', `[${ts}] ${text}`, '[Pipeline finished]'])
+        if (msg.report_id) setReportId(msg.report_id)
         break
       case 'error':
         setConsoleLines(prev => [...prev, '', `[${ts}] ERROR: ${text}`])
@@ -536,6 +544,33 @@ export default function WorkflowPage({ embedded }: { embedded?: boolean }) {
                         style={{ width: `${(activeRun.steps_completed.length / STEPS.length) * 100}%` }}
                       />
                     </div>
+                  </div>
+                )}
+                {activeRun.status === 'completed' && reportId && (
+                  <div className="flex gap-2 pt-2">
+                    <a
+                      href={`${import.meta.env.VITE_API_URL || ''}/api/reports/${reportId}/download`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-primary flex items-center gap-1"
+                    >
+                      <FileText className="w-4 h-4" /> View Report
+                    </a>
+                    <button
+                      onClick={async () => {
+                        const url = `${import.meta.env.VITE_API_URL || ''}/api/reports/${reportId}/download`
+                        const resp = await fetch(url)
+                        const blob = await resp.blob()
+                        const a = document.createElement('a')
+                        a.href = URL.createObjectURL(blob)
+                        a.download = `risk_report_${reportId.slice(0, 8)}.html`
+                        a.click()
+                        URL.revokeObjectURL(a.href)
+                      }}
+                      className="btn-secondary flex items-center gap-1"
+                    >
+                      <Download className="w-4 h-4" /> Download
+                    </button>
                   </div>
                 )}
                 <div className="flex gap-2 pt-2">
