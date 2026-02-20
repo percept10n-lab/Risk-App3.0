@@ -64,6 +64,25 @@ async def list_risks(
     return {"items": serialized, "total": total, "page": page, "page_size": page_size}
 
 
+@router.get("/stats")
+async def risk_stats(db: AsyncSession = Depends(get_db)):
+    """Return aggregate risk counts by level and status."""
+    level_result = await db.execute(
+        select(Risk.risk_level, sa_func.count(Risk.id)).group_by(Risk.risk_level)
+    )
+    by_level = dict(level_result.all())
+
+    status_result = await db.execute(
+        select(Risk.status, sa_func.count(Risk.id)).group_by(Risk.status)
+    )
+    by_status = dict(status_result.all())
+
+    total_result = await db.execute(select(sa_func.count(Risk.id)))
+    total = total_result.scalar() or 0
+
+    return {"total": total, "by_level": by_level, "by_status": by_status}
+
+
 @router.post("", response_model=RiskResponse, status_code=201)
 async def create_risk(risk_in: RiskCreate, db: AsyncSession = Depends(get_db)):
     risk = Risk(**risk_in.model_dump())

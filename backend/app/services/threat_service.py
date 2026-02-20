@@ -381,6 +381,8 @@ class ThreatService:
                     zone=zone,
                     confidence=threat_data.get("confidence", 0.5),
                     rationale=threat_data.get("description", ""),
+                    c4_level=threat_data.get("c4_level", "container"),
+                    stride_category_detail=threat_data.get("stride_category_detail"),
                 )
                 self.db.add(threat)
                 created += 1

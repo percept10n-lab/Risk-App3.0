@@ -39,36 +39,27 @@ export default function DashboardPage() {
   useEffect(() => {
     async function loadStats() {
       try {
-        const [assetsRes, findingsRes, risksRes, threatsRes, findingsDetailRes, risksDetailRes] = await Promise.allSettled([
+        const [assetsRes, findingsStatsRes, risksStatsRes, threatsStatsRes, recentFindingsRes] = await Promise.allSettled([
           api.get('/assets', { params: { page_size: 1 } }),
-          api.get('/findings', { params: { page_size: 1 } }),
-          api.get('/risks', { params: { page_size: 1 } }),
-          api.get('/threats', { params: { page_size: 1 } }),
-          api.get('/findings', { params: { page_size: 10 } }),
-          api.get('/risks', { params: { page_size: 100 } }),
+          api.get('/findings/stats'),
+          api.get('/risks/stats'),
+          api.get('/threats/stats'),
+          api.get('/findings', { params: { page_size: 5 } }),
         ])
 
-        const findingsAll = findingsDetailRes.status === 'fulfilled' ? findingsDetailRes.value.data.items || [] : []
-
-        const findingsBySeverity: Record<string, number> = {}
-        findingsAll.forEach((f: { severity: string }) => {
-          findingsBySeverity[f.severity] = (findingsBySeverity[f.severity] || 0) + 1
-        })
-
-        const risksByLevel: Record<string, number> = {}
-        const allRisks = risksDetailRes.status === 'fulfilled' ? risksDetailRes.value.data.items || [] : []
-        allRisks.forEach((r: { risk_level: string }) => {
-          risksByLevel[r.risk_level] = (risksByLevel[r.risk_level] || 0) + 1
-        })
+        const findingsStats = findingsStatsRes.status === 'fulfilled' ? findingsStatsRes.value.data : { total: 0, by_severity: {} }
+        const risksStats = risksStatsRes.status === 'fulfilled' ? risksStatsRes.value.data : { total: 0, by_level: {} }
+        const threatsStats = threatsStatsRes.status === 'fulfilled' ? threatsStatsRes.value.data : { total: 0 }
+        const recentFindings = recentFindingsRes.status === 'fulfilled' ? recentFindingsRes.value.data.items || [] : []
 
         setStats({
           total_assets: assetsRes.status === 'fulfilled' ? assetsRes.value.data.total : 0,
-          total_findings: findingsRes.status === 'fulfilled' ? findingsRes.value.data.total : 0,
-          total_risks: risksRes.status === 'fulfilled' ? risksRes.value.data.total : 0,
-          total_threats: threatsRes.status === 'fulfilled' ? threatsRes.value.data.total : 0,
-          findings_by_severity: findingsBySeverity,
-          risks_by_level: risksByLevel,
-          recent_findings: findingsAll.slice(0, 5),
+          total_findings: findingsStats.total,
+          total_risks: risksStats.total,
+          total_threats: threatsStats.total,
+          findings_by_severity: findingsStats.by_severity || {},
+          risks_by_level: risksStats.by_level || {},
+          recent_findings: recentFindings.slice(0, 5),
         })
       } catch (err: any) {
         console.error('Failed to load dashboard stats:', err.message)

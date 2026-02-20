@@ -72,3 +72,17 @@ async def init_db():
             await conn.execute(text("ALTER TABLE threats ADD COLUMN stride_category_detail TEXT"))
         except Exception:
             pass
+
+        # Backfill c4_level for existing threats that have NULL
+        await conn.execute(text(
+            "UPDATE threats SET c4_level = 'component' "
+            "WHERE c4_level IS NULL AND asset_id IS NOT NULL"
+        ))
+        await conn.execute(text(
+            "UPDATE threats SET c4_level = 'container' "
+            "WHERE c4_level IS NULL AND asset_id IS NULL AND zone IS NOT NULL"
+        ))
+        await conn.execute(text(
+            "UPDATE threats SET c4_level = 'system_context' "
+            "WHERE c4_level IS NULL AND trust_boundary IS NOT NULL"
+        ))

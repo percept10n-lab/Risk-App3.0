@@ -82,6 +82,25 @@ async def list_findings(
     return {"items": serialized, "total": total, "page": page, "page_size": page_size}
 
 
+@router.get("/stats")
+async def finding_stats(db: AsyncSession = Depends(get_db)):
+    """Return aggregate finding counts by severity and status."""
+    sev_result = await db.execute(
+        select(Finding.severity, sa_func.count(Finding.id)).group_by(Finding.severity)
+    )
+    by_severity = dict(sev_result.all())
+
+    status_result = await db.execute(
+        select(Finding.status, sa_func.count(Finding.id)).group_by(Finding.status)
+    )
+    by_status = dict(status_result.all())
+
+    total_result = await db.execute(select(sa_func.count(Finding.id)))
+    total = total_result.scalar() or 0
+
+    return {"total": total, "by_severity": by_severity, "by_status": by_status}
+
+
 @router.post("", response_model=FindingResponse, status_code=201)
 async def create_finding(finding_in: FindingCreate, db: AsyncSession = Depends(get_db)):
     finding = Finding(**finding_in.model_dump())

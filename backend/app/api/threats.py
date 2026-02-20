@@ -100,6 +100,41 @@ async def list_threats(
     return {"items": serialized, "total": total, "page": page, "page_size": page_size}
 
 
+@router.get("/stats")
+async def threat_stats(db: AsyncSession = Depends(get_db)):
+    """Return aggregate C4-level and STRIDE counts across all threats."""
+    # C4 level counts
+    c4_result = await db.execute(
+        select(Threat.c4_level, sa_func.count(Threat.id)).group_by(Threat.c4_level)
+    )
+    c4_raw = dict(c4_result.all())
+    c4_counts = {
+        "system_context": c4_raw.get("system_context", 0),
+        "container": c4_raw.get("container", 0),
+        "component": c4_raw.get("component", 0),
+    }
+
+    # STRIDE counts (by threat_type)
+    stride_result = await db.execute(
+        select(Threat.threat_type, sa_func.count(Threat.id)).group_by(Threat.threat_type)
+    )
+    stride_raw = dict(stride_result.all())
+    stride_counts = {
+        "spoofing": stride_raw.get("spoofing", 0),
+        "tampering": stride_raw.get("tampering", 0),
+        "repudiation": stride_raw.get("repudiation", 0),
+        "information_disclosure": stride_raw.get("information_disclosure", 0),
+        "denial_of_service": stride_raw.get("denial_of_service", 0),
+        "elevation_of_privilege": stride_raw.get("elevation_of_privilege", 0),
+    }
+
+    # Total
+    total_result = await db.execute(select(sa_func.count(Threat.id)))
+    total = total_result.scalar() or 0
+
+    return {"total": total, "by_c4_level": c4_counts, "by_stride": stride_counts}
+
+
 @router.post("", response_model=ThreatResponse, status_code=201)
 async def create_threat(threat_in: ThreatCreate, db: AsyncSession = Depends(get_db)):
     threat = Threat(**threat_in.model_dump())

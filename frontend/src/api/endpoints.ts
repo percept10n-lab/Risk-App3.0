@@ -29,6 +29,7 @@ export const findingsApi = {
   update: (id: string, data: Partial<Finding>) => api.put<Finding>(`/findings/${id}`, data),
   override: (id: string, data: { field: string; value: any; rationale: string }) =>
     api.post(`/findings/${id}/override`, data),
+  stats: () => api.get('/findings/stats'),
 }
 
 // Threats
@@ -42,6 +43,7 @@ export const threatsApi = {
     api.post('/threats/generate', data || {}),
   zoneAnalysis: (data: { zone: string; run_id?: string }) =>
     api.post('/threats/zone-analysis', data),
+  stats: () => api.get('/threats/stats'),
 }
 
 // Vuln Scan
@@ -62,6 +64,7 @@ export const risksApi = {
   treat: (id: string, data: any) => api.post(`/risks/${id}/treatment`, data),
   override: (id: string, data: { field: string; value: any; rationale: string }) =>
     api.post(`/risks/${id}/override`, data),
+  stats: () => api.get('/risks/stats'),
 }
 
 // MITRE

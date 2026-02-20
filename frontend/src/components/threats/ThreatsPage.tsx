@@ -127,21 +127,19 @@ export default function ThreatsPage() {
 function ThreatsTab() {
   const { threats, total, page, pageSize, loading, filters, fetchThreats, setFilters, setPage, deleteThreat } = useThreatStore()
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [stats, setStats] = useState<{
+    total: number
+    by_c4_level: Record<string, number>
+    by_stride: Record<string, number>
+  } | null>(null)
 
   useEffect(() => {
     fetchThreats()
+    threatsApi.stats().then((res) => setStats(res.data)).catch(() => {})
   }, [])
 
-  const strideCounts = STRIDE_TYPES.reduce<Record<string, number>>((acc, t) => {
-    acc[t.value] = threats.filter((th) => th.threat_type === t.value).length
-    return acc
-  }, {})
-
-  const c4Counts = {
-    system_context: threats.filter((t) => t.c4_level === 'system_context').length,
-    container: threats.filter((t) => t.c4_level === 'container').length,
-    component: threats.filter((t) => t.c4_level === 'component').length,
-  }
+  const strideCounts = stats?.by_stride || {}
+  const c4Counts = stats?.by_c4_level || { system_context: 0, container: 0, component: 0 }
 
   return (
     <div>
