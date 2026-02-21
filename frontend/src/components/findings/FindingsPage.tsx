@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import PageHeader from '../common/PageHeader'
 import DataTable from '../common/DataTable'
 import Pagination from '../common/Pagination'
@@ -96,6 +97,7 @@ const columns = [
 export default function FindingsPage({ embedded }: { embedded?: boolean }) {
   const { findings, total, page, pageSize, loading, filters, fetchFindings, setFilters, setPage } = useFindingStore()
   const { assets, fetchAssets } = useAssetStore()
+  const navigate = useNavigate()
 
   const [scanModalOpen, setScanModalOpen] = useState(false)
   const [scanAssetId, setScanAssetId] = useState('')
@@ -186,6 +188,7 @@ export default function FindingsPage({ embedded }: { embedded?: boolean }) {
         columns={columns}
         data={findings}
         loading={loading}
+        onRowClick={(finding) => navigate(`/findings/${finding.id}`)}
         emptyMessage="No findings yet. Run a vulnerability scan to detect issues."
       />
 
