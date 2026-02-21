@@ -141,8 +141,8 @@ export default function AgentChat({ context }: AgentChatProps) {
         "I have full access to your assessment data and can **run nmap scans**, **execute security tests**, " +
         "**perform threat modeling**, and **trigger the assessment pipeline** — all with your authorization.\n\n" +
         "Try asking me:\n" +
-        '- "Scan 192.168.1.0/24 with nmap"\n' +
-        '- "Run HTTP security headers check on 192.168.1.1"\n' +
+        '- "Scan 192.168.178.0/24 with nmap"\n' +
+        '- "Run HTTP security headers check on 192.168.178.1"\n' +
         '- "List available security tests"\n' +
         '- "Run threat modeling"\n' +
         '- "How\'s my security posture?"',
