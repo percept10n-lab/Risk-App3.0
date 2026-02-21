@@ -25,7 +25,7 @@ const allTrue = Object.fromEntries(MODULE_IDS.map((id) => [id, true])) as Record
 export const useModuleStore = create<ModuleState>()(
   persist(
     (set) => ({
-      enabledModules: { ...allFalse },
+      enabledModules: { ...allTrue },
       toggleModule: (id) =>
         set((state) => ({
           enabledModules: { ...state.enabledModules, [id]: !state.enabledModules[id] },
@@ -33,6 +33,16 @@ export const useModuleStore = create<ModuleState>()(
       enableAll: () => set({ enabledModules: { ...allTrue } }),
       disableAll: () => set({ enabledModules: { ...allFalse } }),
     }),
-    { name: 'risk_modules' },
+    {
+      name: 'risk_modules',
+      version: 1,
+      migrate: (_persisted, version) => {
+        // v0 defaulted all modules to false — fix existing users
+        if (version === 0) {
+          return { enabledModules: { ...allTrue } }
+        }
+        return _persisted as ModuleState
+      },
+    },
   ),
 )

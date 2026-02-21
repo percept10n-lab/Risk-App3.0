@@ -5,6 +5,7 @@ import StatCard from '../common/StatCard'
 import Badge from '../common/Badge'
 import { Monitor, AlertTriangle, Shield, Target, Bug, CheckCircle, FileText, Crosshair, X, Loader2 } from 'lucide-react'
 import api from '../../api/client'
+import { useModuleStore, type ModuleId } from '../../stores/moduleStore'
 
 interface DashboardStats {
   total_assets: number
@@ -31,6 +32,15 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const enabledModules = useModuleStore((s) => s.enabledModules)
+
+  const navTo = (path: string, moduleId?: ModuleId) => {
+    if (moduleId && !enabledModules[moduleId]) {
+      navigate('/settings?highlight=' + moduleId)
+      return
+    }
+    navigate(path)
+  }
 
   // Modal state
   const [sevModal, setSevModal] = useState<{ severity: string; items: ModalFinding[]; loading: boolean } | null>(null)
@@ -114,10 +124,10 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <StatCard title="Total Assets" value={stats?.total_assets ?? 0} icon={Monitor} color="blue" onClick={() => navigate('/assets')} />
-            <StatCard title="Findings" value={stats?.total_findings ?? 0} icon={AlertTriangle} color="yellow" onClick={() => navigate('/findings')} />
-            <StatCard title="Risks" value={stats?.total_risks ?? 0} icon={Shield} color="red" onClick={() => navigate('/risks')} />
-            <StatCard title="Threats" value={stats?.total_threats ?? 0} icon={Target} color="purple" onClick={() => navigate('/threats?tab=mitre')} />
+            <StatCard title="Total Assets" value={stats?.total_assets ?? 0} icon={Monitor} color="blue" onClick={() => navTo('/assets')} />
+            <StatCard title="Findings" value={stats?.total_findings ?? 0} icon={AlertTriangle} color="yellow" onClick={() => navTo('/findings', 'findings')} />
+            <StatCard title="Risks" value={stats?.total_risks ?? 0} icon={Shield} color="red" onClick={() => navTo('/risks', 'risks')} />
+            <StatCard title="Threats" value={stats?.total_threats ?? 0} icon={Target} color="purple" onClick={() => navTo('/threats?tab=mitre', 'threats')} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -181,7 +191,7 @@ export default function DashboardPage() {
             <div className="card p-6">
               <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
               <div className="space-y-3">
-                <button onClick={() => navigate('/operations?tab=workflow')} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors w-full text-left">
+                <button onClick={() => navTo('/operations?tab=workflow', 'operations')} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors w-full text-left">
                   <div className="w-10 h-10 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center">
                     <Bug className="w-5 h-5" />
                   </div>
@@ -199,7 +209,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-gray-500">Get AI-assisted finding prioritization</p>
                   </div>
                 </button>
-                <button onClick={() => navigate('/reports')} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors w-full text-left">
+                <button onClick={() => navTo('/reports', 'reports')} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors w-full text-left">
                   <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
                     <FileText className="w-5 h-5" />
                   </div>
@@ -221,7 +231,7 @@ export default function DashboardPage() {
                   <div
                     key={f.id}
                     className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/findings/${f.id}`)}
+                    onClick={() => navTo(`/findings/${f.id}`, 'findings')}
                   >
                     <Badge variant={f.severity as any}>{f.severity}</Badge>
                     <p className="text-sm flex-1 truncate">{f.title}</p>
@@ -260,7 +270,7 @@ export default function DashboardPage() {
                   <div
                     key={f.id}
                     className="px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => { setSevModal(null); navigate(`/findings/${f.id}`) }}
+                    onClick={() => { setSevModal(null); navTo(`/findings/${f.id}`, 'findings') }}
                   >
                     <div className="flex items-center gap-3 mb-1">
                       <Badge variant={f.severity as any}>{f.severity}</Badge>
