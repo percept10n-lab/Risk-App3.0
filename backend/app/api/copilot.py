@@ -140,13 +140,19 @@ async def execute_tool(request: ExecuteToolRequest, db: AsyncSession = Depends(g
             result = f"Analysis complete: {analysis.get('risks_created', 0)} risks created"
 
         elif tool == "generate_report":
-            from app.services.report_service import ReportService
-            service = ReportService(db)
-            report = await service.generate(
-                report_type=args["report_type"],
-                title=args.get("title"),
+            from app.api.reports import _build_report, ReportGenerateRequest
+            # Map semantic report types to actual format types
+            raw_type = args.get("report_type", "html")
+            format_map = {"executive": "html", "technical": "html", "compliance": "html", "risk": "html"}
+            report_format = format_map.get(raw_type, raw_type)
+            title = args.get("title") or f"{raw_type.title()} Security Report"
+            req = ReportGenerateRequest(
+                report_type=report_format,
+                title=title,
             )
-            result = f"Report generated: {report.get('id', 'unknown')}"
+            report = await _build_report(req, db)
+            report_id = report.get("report_id", report.get("id", "unknown"))
+            result = f"Report generated successfully (ID: {report_id}). View it on the Reports page."
 
         elif tool == "create_note":
             event = AuditEvent(
