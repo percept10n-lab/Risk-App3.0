@@ -14,7 +14,6 @@ const STEPS = [
   { key: 'vuln_scanning', label: 'Vulnerability Scanning', description: 'Check for known vulnerabilities' },
   { key: 'exploit_analysis', label: 'Exploit Analysis', description: 'Assess exploitability of findings' },
   { key: 'mitre_mapping', label: 'MITRE Mapping', description: 'Map findings & threats to ATT&CK' },
-  { key: 'threat_modeling', label: 'Threat Modeling', description: 'C4/STRIDE threat analysis' },
   { key: 'risk_analysis', label: 'Risk Analysis', description: 'Calculate risk levels (ISO 27005)' },
   { key: 'baseline', label: 'Baseline Snapshot', description: 'Create drift detection baseline' },
   { key: 'reporting', label: 'Report Generation', description: 'Generate assessment report' },

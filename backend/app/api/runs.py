@@ -29,7 +29,7 @@ router = APIRouter()
 
 PIPELINE_STEPS = [
     "discovery", "fingerprinting", "vuln_scanning", "exploit_analysis",
-    "mitre_mapping", "threat_modeling", "risk_analysis", "baseline", "reporting",
+    "mitre_mapping", "risk_analysis", "baseline", "reporting",
 ]
 
 
@@ -181,7 +181,6 @@ async def _execute_pipeline(run_id: str, scope: dict):
     from app.services.vuln_scan_service import VulnScanService
     from app.services.exploit_service import ExploitEnrichmentService
     from app.services.mitre_service import MitreService
-    from app.services.threat_service import ThreatService
     from app.services.risk_analysis_service import RiskAnalysisService
     from app.services.drift_service import DriftService
 
@@ -195,7 +194,6 @@ async def _execute_pipeline(run_id: str, scope: dict):
         "vuln_scanning": 120,
         "exploit_analysis": 30,
         "mitre_mapping": 30,
-        "threat_modeling": 60,
         "risk_analysis": 30,
         "baseline": 15,
         "reporting": 60,
@@ -207,7 +205,6 @@ async def _execute_pipeline(run_id: str, scope: dict):
         "vuln_scanning": ("Vulnerability Scanning", "Running vulnerability checks on assets..."),
         "exploit_analysis": ("Exploit Analysis", "Assessing exploitability of findings..."),
         "mitre_mapping": ("MITRE Mapping", "Mapping findings to ATT&CK techniques..."),
-        "threat_modeling": ("Threat Modeling", "Running C4/STRIDE threat analysis..."),
         "risk_analysis": ("Risk Analysis", "Calculating risk levels for all scenarios..."),
         "baseline": ("Baseline Snapshot", "Creating drift detection baseline..."),
         "reporting": ("Report Generation", "Generating assessment report..."),
@@ -289,25 +286,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
             mm_count = mm_result.get("mappings_created", "?") if isinstance(mm_result, dict) else "?"
             await _broadcast(run_id, "step_complete", f"MITRE mapping complete — {mm_count} techniques mapped", step="mitre_mapping")
 
-            # Step 6: Threat Modeling
-            await _update_run_step(db, run_id, "threat_modeling", completed_steps)
-            await _broadcast(run_id, "step_start", STEP_LABELS["threat_modeling"][1], step="threat_modeling")
-            logger.info("Pipeline step: threat_modeling", run_id=run_id)
-            threat_svc = ThreatService(db)
-
-            async def _threat_broadcast(msg: str):
-                await _broadcast(run_id, "step_detail", msg, step="threat_modeling")
-
-            tm_result = await _run_step_with_timeout(
-                threat_svc.run_full_threat_modeling(run_id=run_id, broadcast_fn=_threat_broadcast),
-                "threat_modeling", STEP_TIMEOUTS["threat_modeling"], run_id=run_id,
-            )
-            await db.commit()
-            completed_steps.append("threat_modeling")
-            tm_count = tm_result.get("threats_created", "?") if isinstance(tm_result, dict) else "?"
-            await _broadcast(run_id, "step_complete", f"Threat modeling complete — {tm_count} threats identified", step="threat_modeling")
-
-            # Step 7: Risk Analysis
+            # Step 6: Risk Analysis
             await _update_run_step(db, run_id, "risk_analysis", completed_steps)
             await _broadcast(run_id, "step_start", STEP_LABELS["risk_analysis"][1], step="risk_analysis")
             logger.info("Pipeline step: risk_analysis", run_id=run_id)
@@ -321,7 +300,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
             ra_count = ra_result.get("risks_created", "?") if isinstance(ra_result, dict) else "?"
             await _broadcast(run_id, "step_complete", f"Risk analysis complete — {ra_count} risk scenarios", step="risk_analysis")
 
-            # Step 8: Baseline
+            # Step 7: Baseline
             await _update_run_step(db, run_id, "baseline", completed_steps)
             await _broadcast(run_id, "step_start", STEP_LABELS["baseline"][1], step="baseline")
             logger.info("Pipeline step: baseline", run_id=run_id)
@@ -347,7 +326,7 @@ async def _execute_pipeline(run_id: str, scope: dict):
             except Exception as e:
                 logger.warning("Pipeline stale cleanup failed", error=str(e))
 
-            # Step 9: Report Generation
+            # Step 8: Report Generation
             await _update_run_step(db, run_id, "reporting", completed_steps)
             await _broadcast(run_id, "step_start", STEP_LABELS["reporting"][1], step="reporting")
             logger.info("Pipeline step: reporting", run_id=run_id)

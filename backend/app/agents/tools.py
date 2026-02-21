@@ -313,7 +313,7 @@ COPILOT_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="start_assessment_pipeline",
-        description="Start the full 9-step assessment pipeline (nmap scan → asset import → findings → vuln assessment → threat modeling → MITRE mapping → risk analysis). Requires user confirmation.",
+        description="Start the full 8-step assessment pipeline (discovery → fingerprinting → vuln scanning → exploit analysis → MITRE mapping → risk analysis → baseline → reporting). Requires user confirmation.",
         parameters={
             "type": "object",
             "properties": {
@@ -809,7 +809,7 @@ class ToolExecutor:
         return {
             "pending_confirmation": True,
             "tool": "start_assessment_pipeline",
-            "description": f"Start full assessment pipeline on {target} (nmap → assets → findings → vuln → threat → MITRE → risk)",
+            "description": f"Start full assessment pipeline on {target} (discovery → fingerprinting → vuln scanning → exploit analysis → MITRE → risk → baseline → reporting)",
             "args": {"target": target, "nmap_args": nmap_args},
         }
 
