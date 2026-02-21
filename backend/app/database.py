@@ -1,26 +1,31 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import StaticPool
 from sqlalchemy import event
+from sqlalchemy.engine import make_url
 from app.config import settings
 import os
 
-os.makedirs(os.path.dirname(settings.database_url.replace("sqlite+aiosqlite:///", "")) or "data", exist_ok=True)
+url = make_url(settings.database_url)
+is_sqlite = url.drivername.startswith("sqlite")
+
+if is_sqlite:
+    db_path = url.database or "data/risk_platform.db"
+    os.makedirs(os.path.dirname(db_path) or "data", exist_ok=True)
 
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
-    connect_args={"check_same_thread": False, "timeout": 30},
+    connect_args={"check_same_thread": False, "timeout": 30} if is_sqlite else {},
 )
 
-
-@event.listens_for(engine.sync_engine, "connect")
-def _set_sqlite_pragma(dbapi_connection, connection_record):
-    """Enable WAL mode for better concurrency with SQLite."""
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=30000")
-    cursor.close()
+if is_sqlite:
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(dbapi_connection, connection_record):
+        """Enable WAL mode for better concurrency with SQLite."""
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -116,3 +121,4 @@ async def init_db():
             "UPDATE threats SET c4_level = 'system_context' "
             "WHERE c4_level IS NULL AND trust_boundary IS NOT NULL"
         ))
+
