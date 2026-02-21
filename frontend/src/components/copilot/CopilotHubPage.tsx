@@ -1,22 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import CopilotPage from './CopilotPage'
 import {
   Bot,
-  LayoutDashboard,
-  Monitor,
-  Bug,
-  Crosshair,
-  PlayCircle,
-  Shield,
-  FileText,
   Loader2,
-  AlertTriangle,
-  Lightbulb,
-  Link2,
 } from 'lucide-react'
 import api from '../../api/client'
-import { copilotApi } from '../../api/endpoints'
 
 interface QuickStats {
   total_assets: number
@@ -37,21 +25,9 @@ interface ScoreBreakdown {
   exposure: number
 }
 
-const quickNavItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', countKey: null },
-  { to: '/assets', icon: Monitor, label: 'Assets', countKey: 'total_assets' as const },
-  { to: '/findings', icon: Bug, label: 'Findings', countKey: 'total_findings' as const },
-  { to: '/threats', icon: Crosshair, label: 'Threats', countKey: 'total_threats' as const },
-  { to: '/operations', icon: PlayCircle, label: 'Operations', countKey: null },
-  { to: '/risks', icon: Shield, label: 'Risks', countKey: 'total_risks' as const },
-  { to: '/reports', icon: FileText, label: 'Reports', countKey: null },
-]
-
 export default function CopilotHubPage() {
-  const navigate = useNavigate()
   const [stats, setStats] = useState<QuickStats | null>(null)
   const [statsLoading, setStatsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'agent' | 'workflow'>('agent')
 
   useEffect(() => {
     async function loadStats() {
@@ -102,33 +78,8 @@ export default function CopilotHubPage() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        {/* Left Panel: Quick Nav + Security Posture */}
+        {/* Left Panel: Security Posture */}
         <div className="xl:col-span-3 space-y-6">
-          {/* Quick Navigation */}
-          <div className="card p-4">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Quick Navigation</h3>
-            <div className="space-y-1">
-              {quickNavItems.map((item) => {
-                const count = item.countKey && stats ? (stats as any)[item.countKey] : null
-                return (
-                  <button
-                    key={item.to}
-                    onClick={() => navigate(item.to)}
-                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-left text-sm hover:bg-gray-50 transition-colors group"
-                  >
-                    <item.icon className="w-4 h-4 text-gray-400 group-hover:text-brand-600" />
-                    <span className="flex-1 text-gray-700 group-hover:text-gray-900">{item.label}</span>
-                    {count != null && (
-                      <span className="text-xs font-medium text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                        {count}
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           {/* Security Posture */}
           <div className="card p-4">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Security Posture</h3>
@@ -152,40 +103,19 @@ export default function CopilotHubPage() {
                   />
                 </div>
                 {scoreBreakdown && (
-                  <div className="space-y-2 text-xs">
-                    <ScoreRow label="Remediation" score={scoreBreakdown.remediation} max={40} />
-                    <ScoreRow label="Severity Profile" score={scoreBreakdown.severityProfile} max={25} />
-                    <ScoreRow label="Risk Treatment" score={scoreBreakdown.riskTreatment} max={25} />
-                    <ScoreRow label="Exposure" score={scoreBreakdown.exposure} max={10} />
+                  <div className="space-y-3 text-xs">
+                    <ScoreRow label="Remediation" score={scoreBreakdown.remediation} max={40}
+                      description="% of findings resolved, weighted by severity" />
+                    <ScoreRow label="Severity Profile" score={scoreBreakdown.severityProfile} max={25}
+                      description="How benign the remaining open findings are" />
+                    <ScoreRow label="Risk Treatment" score={scoreBreakdown.riskTreatment} max={25}
+                      description="% of risks treated or being monitored" />
+                    <ScoreRow label="Exposure" score={scoreBreakdown.exposure} max={10}
+                      description="Open findings per asset (fewer = better)" />
                   </div>
                 )}
               </div>
             )}
-          </div>
-
-          {/* Smart Actions */}
-          <div className="card p-4">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Smart Actions</h3>
-            <div className="space-y-2">
-              <button
-                onClick={() => setActiveTab('workflow')}
-                className="w-full text-left px-3 py-2.5 rounded-lg text-sm bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors"
-              >
-                Triage Findings
-              </button>
-              <button
-                onClick={() => navigate('/operations?tab=workflow')}
-                className="w-full text-left px-3 py-2.5 rounded-lg text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                Start Workflow
-              </button>
-              <button
-                onClick={() => navigate('/reports')}
-                className="w-full text-left px-3 py-2.5 rounded-lg text-sm bg-gray-50 text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                Generate Report
-              </button>
-            </div>
           </div>
         </div>
 
@@ -193,157 +123,26 @@ export default function CopilotHubPage() {
         <div className="xl:col-span-9">
           <CopilotPage embedded />
         </div>
-
-        {/* Proactive Insights */}
-        <div className="xl:col-span-12">
-          <InsightsPanel />
-        </div>
       </div>
     </div>
   )
 }
 
-function ScoreRow({ label, score, max }: { label: string; score: number; max: number }) {
+function ScoreRow({ label, score, max, description }: { label: string; score: number; max: number; description: string }) {
   const pct = max > 0 ? (score / max) * 100 : 0
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-gray-500 w-28 truncate">{label}</span>
-      <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-        <div
-          className={`h-1.5 rounded-full ${pct >= 70 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-500' : 'bg-red-400'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="font-medium text-gray-600 w-10 text-right">{score}/{max}</span>
-    </div>
-  )
-}
-
-/* ── Proactive Insights Panel ── */
-
-interface InsightsData {
-  urgent_issues: Array<{ type: string; severity: string; title: string; id: string; detail: string }>
-  attack_chains: Array<{ asset_id: string; asset_name: string; zone: string; tactics: string[]; tactic_count: number; detail: string }>
-  recommendations: Array<{ type: string; priority: string; title: string; action: string }>
-}
-
-function InsightsPanel() {
-  const [insights, setInsights] = useState<InsightsData | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    copilotApi.insights()
-      .then((res) => setInsights(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="card p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Lightbulb className="w-5 h-5 text-yellow-500" />
-          <h3 className="font-semibold">Proactive Insights</h3>
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="text-gray-500 w-28 truncate">{label}</span>
+        <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+          <div
+            className={`h-1.5 rounded-full ${pct >= 70 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-500' : 'bg-red-400'}`}
+            style={{ width: `${pct}%` }}
+          />
         </div>
-        <div className="flex items-center justify-center py-6">
-          <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-        </div>
+        <span className="font-medium text-gray-600 w-10 text-right">{score}/{max}</span>
       </div>
-    )
-  }
-
-  if (!insights) return null
-
-  const hasContent =
-    insights.urgent_issues.length > 0 ||
-    insights.attack_chains.length > 0 ||
-    insights.recommendations.length > 0
-
-  if (!hasContent) return null
-
-  return (
-    <div className="card p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Lightbulb className="w-5 h-5 text-yellow-500" />
-        <h3 className="font-semibold">Proactive Insights</h3>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Urgent Issues */}
-        {insights.urgent_issues.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle className="w-4 h-4 text-red-500" />
-              <h4 className="text-sm font-semibold text-gray-700">Urgent Issues ({insights.urgent_issues.length})</h4>
-            </div>
-            <div className="space-y-2">
-              {insights.urgent_issues.slice(0, 5).map((issue) => (
-                <div key={issue.id} className="p-2.5 bg-red-50 border border-red-100 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                      issue.severity === 'critical' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
-                    }`}>
-                      {issue.severity}
-                    </span>
-                    <span className="text-xs text-gray-500 uppercase">{issue.type}</span>
-                  </div>
-                  <p className="text-sm text-gray-800 mt-1 line-clamp-2">{issue.title}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Attack Chains */}
-        {insights.attack_chains.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Link2 className="w-4 h-4 text-purple-500" />
-              <h4 className="text-sm font-semibold text-gray-700">Attack Chain Potential ({insights.attack_chains.length})</h4>
-            </div>
-            <div className="space-y-2">
-              {insights.attack_chains.map((chain) => (
-                <div key={chain.asset_id} className="p-2.5 bg-purple-50 border border-purple-100 rounded-lg">
-                  <p className="text-sm font-medium text-gray-800">{chain.asset_name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{chain.zone} zone</p>
-                  <div className="flex flex-wrap gap-1 mt-1.5">
-                    {chain.tactics.map((t) => (
-                      <span key={t} className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Recommendations */}
-        {insights.recommendations.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Lightbulb className="w-4 h-4 text-yellow-500" />
-              <h4 className="text-sm font-semibold text-gray-700">Recommendations ({insights.recommendations.length})</h4>
-            </div>
-            <div className="space-y-2">
-              {insights.recommendations.map((rec, i) => (
-                <div key={i} className="p-2.5 bg-yellow-50 border border-yellow-100 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                      rec.priority === 'high' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {rec.priority}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-800 mt-1">{rec.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{rec.action}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <p className="text-[10px] text-gray-400 mt-0.5 ml-0.5">{description}</p>
     </div>
   )
 }
