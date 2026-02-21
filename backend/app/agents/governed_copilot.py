@@ -264,14 +264,15 @@ class GovernedCopilot:
                             f"```\n{result_summary[:3000]}\n```\n\n"
                             "Analyze these results from a **risk perspective**. "
                             "Identify the most important security concerns, explain their impact, "
-                            "and suggest concrete next actions I should take."
+                            "and suggest concrete next actions I should take. "
+                            "Do NOT call any tools — just provide your written analysis."
                         ),
                     ),
                 ]
 
                 async for event in self.llm.stream_with_tools(
                     messages=messages,
-                    tools=COPILOT_TOOLS,
+                    tools=[],
                     tool_executor=self.tool_executor.execute,
                 ):
                     if event["type"] == "token":
@@ -323,23 +324,26 @@ class GovernedCopilot:
 
         if tool_name == "run_nmap_scan":
             if "open" in summary_lower and ("80" in summary_lower or "443" in summary_lower or "http" in summary_lower):
-                suggestions.append(f"Run HTTP security headers check on {target}")
+                suggestions.append(f"Run pentest http_headers on {target}")
             if "open" in summary_lower and ("443" in summary_lower or "tls" in summary_lower or "ssl" in summary_lower):
-                suggestions.append(f"Check TLS configuration on {target}")
+                suggestions.append(f"Run pentest tls_check on {target}")
             if "open" in summary_lower and ("22" in summary_lower or "ssh" in summary_lower):
-                suggestions.append(f"Run SSH hardening check on {target}")
+                suggestions.append(f"Run pentest ssh_hardening on {target}")
             if "open" in summary_lower:
                 suggestions.append("Run threat modeling")
-                suggestions.append(f"Run vulnerability probe on {target}")
+                suggestions.append(f"Run pentest web_vuln_probe on {target}")
         elif tool_name == "run_pentest_action":
             action_id = args.get("action_id", "")
             if "finding" in summary_lower or "vuln" in summary_lower:
-                suggestions.append(f"Run exploit chain analysis on {target}")
                 suggestions.append("Generate security report")
             if action_id == "http_headers":
-                suggestions.append(f"Check TLS configuration on {target}")
+                suggestions.append(f"Run pentest tls_check on {target}")
+                suggestions.append(f"Run pentest web_vuln_probe on {target}")
             if action_id == "tls_check":
-                suggestions.append(f"Run web vulnerability probe on {target}")
+                suggestions.append(f"Run pentest web_vuln_probe on {target}")
+            if action_id == "ssh_hardening":
+                suggestions.append(f"Run pentest default_creds on {target}")
+            suggestions.append("Run threat modeling")
         elif tool_name == "run_threat_modeling":
             suggestions.append("View MITRE ATT&CK mappings")
             suggestions.append("Run risk analysis")

@@ -259,7 +259,7 @@ COPILOT_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="run_nmap_scan",
-        description="Run an nmap network scan on a target (IP or CIDR). Only RFC 1918 private ranges allowed. Requires user confirmation. Shows real-time terminal output.",
+        description="Run an nmap network discovery/port scan on a target (IP or CIDR). Use this ONLY for network scanning and port discovery. For specific security tests (HTTP headers, TLS, SSH, etc.) use run_pentest_action instead. Only RFC 1918 private ranges allowed. Requires user confirmation. Shows real-time terminal output.",
         parameters={
             "type": "object",
             "properties": {
@@ -271,11 +271,29 @@ COPILOT_TOOLS: list[ToolDefinition] = [
     ),
     ToolDefinition(
         name="run_pentest_action",
-        description="Execute a pentest/security test action against a target. Use list_pentest_actions to see available actions. Requires user confirmation. Shows real-time terminal output.",
+        description=(
+            "Execute a security test against a target. Use this tool (NOT run_nmap_scan) for specific security checks. "
+            "Available action_id values: "
+            "http_headers (HTTP security headers check), "
+            "tls_check (TLS/SSL certificate and cipher analysis), "
+            "ssh_hardening (SSH configuration audit), "
+            "port_verify (verify specific port state), "
+            "web_vuln_probe (web vulnerability scan), "
+            "dns_check (DNS configuration check), "
+            "smb_check (SMB/CIFS security check), "
+            "default_creds (default credentials check), "
+            "service_enum (service version enumeration), "
+            "network_trace (network path trace). "
+            "Requires user confirmation. Shows real-time terminal output."
+        ),
         parameters={
             "type": "object",
             "properties": {
-                "action_id": {"type": "string", "description": "Action ID (e.g. http_headers, tls_check, ssh_hardening, port_verify, web_vuln_probe)"},
+                "action_id": {
+                    "type": "string",
+                    "enum": ["http_headers", "tls_check", "ssh_hardening", "port_verify", "web_vuln_probe", "dns_check", "smb_check", "default_creds", "service_enum", "network_trace"],
+                    "description": "Security test to run",
+                },
                 "target": {"type": "string", "description": "Target IP address"},
                 "params": {"type": "object", "description": "Optional action parameters (e.g. port, use_tls)"},
             },
