@@ -9,6 +9,7 @@ from app.database import get_db, async_session
 from app.models.finding import Finding
 from app.models.run import Run
 from app.services.nmap_service import NmapService
+from app.utils.network import validate_target_routable
 import structlog
 
 router = APIRouter()
@@ -38,6 +39,12 @@ async def _run_pipeline_background(target: str, nmap_args: str, run_id: str, tim
                     "status": "error",
                     "error": f"Target {target} is outside allowed scope (RFC 1918 only)",
                 }
+                await _mark_run_status(run_id, "failed")
+                return
+
+            reachable, reach_msg = validate_target_routable(target)
+            if not reachable:
+                _pipeline_status[run_id] = {"status": "error", "error": reach_msg}
                 await _mark_run_status(run_id, "failed")
                 return
 
@@ -113,6 +120,10 @@ async def run_scan(request: CustomScanRequest, background_tasks: BackgroundTasks
     service_check = NmapService.__new__(NmapService)
     if not service_check.validate_scope(request.target):
         return {"status": "error", "error": f"Target {request.target} is outside allowed scope (RFC 1918 only)"}
+
+    reachable, reach_msg = validate_target_routable(request.target)
+    if not reachable:
+        return {"status": "error", "error": reach_msg}
 
     valid, msg = NmapService.validate_nmap_args(request.nmap_args)
     if not valid:

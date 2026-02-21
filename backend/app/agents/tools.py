@@ -753,9 +753,13 @@ class ToolExecutor:
     ) -> dict:
         """Validate scope and return pending confirmation for nmap scan."""
         from app.services.nmap_service import NmapService
+        from app.utils.network import validate_target_routable
         svc = NmapService(self.db)
         if not svc.validate_scope(target):
             return {"error": f"Target {target} is outside allowed scope (RFC 1918 private ranges only)"}
+        reachable, reach_msg = validate_target_routable(target)
+        if not reachable:
+            return {"error": reach_msg}
         valid, msg = svc.validate_nmap_args(nmap_args)
         if not valid:
             return {"error": f"Invalid nmap arguments: {msg}"}
@@ -800,9 +804,13 @@ class ToolExecutor:
     ) -> dict:
         """Validate scope and return pending confirmation for full pipeline."""
         from app.services.nmap_service import NmapService
+        from app.utils.network import validate_target_routable
         svc = NmapService(self.db)
         if not svc.validate_scope(target):
             return {"error": f"Target {target} is outside allowed scope (RFC 1918 private ranges only)"}
+        reachable, reach_msg = validate_target_routable(target)
+        if not reachable:
+            return {"error": reach_msg}
         valid, msg = svc.validate_nmap_args(nmap_args)
         if not valid:
             return {"error": f"Invalid nmap arguments: {msg}"}

@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.database import get_db
 from app.services.discovery_service import DiscoveryService, FingerprintService
+from app.utils.network import validate_target_routable
 from app.services.threat_service import ThreatService
 from app.services.vuln_scan_service import VulnScanService
 from app.services.exploit_service import ExploitEnrichmentService
@@ -34,6 +35,9 @@ class FingerprintRequest(BaseModel):
 
 @router.post("/discover")
 async def run_discovery(request: DiscoveryRequest, db: AsyncSession = Depends(get_db)):
+    reachable, msg = validate_target_routable(request.subnet)
+    if not reachable:
+        raise HTTPException(status_code=400, detail=msg)
     service = DiscoveryService(db)
     result = await service.run_discovery(
         subnet=request.subnet,
@@ -46,6 +50,9 @@ async def run_discovery(request: DiscoveryRequest, db: AsyncSession = Depends(ge
 @router.post("/nmap-discover")
 async def nmap_discover(request: NmapDiscoverRequest, db: AsyncSession = Depends(get_db)):
     """Run nmap SYN scan discovery returning hosts with open ports."""
+    reachable, msg = validate_target_routable(request.network)
+    if not reachable:
+        raise HTTPException(status_code=400, detail=msg)
     try:
         service = DiscoveryService(db)
         result = await service.run_nmap_discovery(
@@ -86,6 +93,9 @@ class FullScanRequest(BaseModel):
 @router.post("/full-scan")
 async def run_full_scan(request: FullScanRequest, db: AsyncSession = Depends(get_db)):
     """Run full pipeline: discovery → fingerprint → threat model → vuln scan → exploit analysis → MITRE → risk."""
+    reachable, msg = validate_target_routable(request.subnet)
+    if not reachable:
+        raise HTTPException(status_code=400, detail=msg)
     run_manager = RunManager(db)
     run = await run_manager.create_run(scope={"subnets": [request.subnet]})
     step_timeout = request.timeout // 7
