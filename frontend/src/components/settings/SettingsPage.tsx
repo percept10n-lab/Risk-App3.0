@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
 import PageHeader from '../common/PageHeader'
-import { Settings, Shield, Bot, Gauge, CheckCircle2, XCircle, Loader2, Clock, Plus, Play, Trash2, Radio } from 'lucide-react'
+import { Settings, Shield, Bot, Gauge, CheckCircle2, XCircle, Loader2, Clock, Plus, Play, Trash2, Radio, Puzzle } from 'lucide-react'
 import { settingsApi, schedulesApi, intelApi, copilotApi } from '../../api/endpoints'
+import ModulesTab from './ModulesTab'
 import { formatDate } from '../../utils/format'
 import type { ScanSchedule } from '../../types'
 
-const TABS = ['policy', 'ai', 'thresholds', 'schedules', 'intel'] as const
+const TABS = ['modules', 'policy', 'ai', 'thresholds', 'schedules', 'intel'] as const
 type Tab = typeof TABS[number]
 const TAB_LABELS: Record<Tab, { label: string; icon: any }> = {
+  modules: { label: 'Modules', icon: Puzzle },
   policy: { label: 'Scan Policy', icon: Shield },
   ai: { label: 'AI Configuration', icon: Bot },
   thresholds: { label: 'Evaluation Thresholds', icon: Gauge },
@@ -65,7 +67,7 @@ const SCAN_TYPES = [
 ]
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<Tab>('policy')
+  const [tab, setTab] = useState<Tab>('modules')
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState<string | null>(null)
 
@@ -322,6 +324,9 @@ export default function SettingsPage() {
           )
         })}
       </div>
+
+      {/* Tab: Modules */}
+      {tab === 'modules' && <ModulesTab />}
 
       {/* Tab 1: Scan Policy */}
       {tab === 'policy' && (

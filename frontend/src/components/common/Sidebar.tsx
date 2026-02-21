@@ -1,5 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import { useUIStore } from '../../stores/uiStore'
+import { useModuleStore } from '../../stores/moduleStore'
+import type { ModuleId } from '../../stores/moduleStore'
 import {
   LayoutDashboard,
   Monitor,
@@ -15,15 +17,15 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 
-const navItems = [
+const navItems: Array<{ to: string; icon: any; label: string; end?: boolean; moduleId?: ModuleId }> = [
   { to: '/', icon: Bot, label: 'AI Copilot', end: true },
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/assets', icon: Monitor, label: 'Assets' },
-  { to: '/findings', icon: Bug, label: 'Findings & Vulns' },
-  { to: '/threats', icon: Crosshair, label: 'Threat Analysis' },
-  { to: '/operations', icon: PlayCircle, label: 'Operations' },
-  { to: '/risks', icon: Shield, label: 'Risks' },
-  { to: '/reports', icon: FileText, label: 'Reports' },
+  { to: '/findings', icon: Bug, label: 'Findings & Vulns', moduleId: 'findings' },
+  { to: '/threats', icon: Crosshair, label: 'Threat Analysis', moduleId: 'threats' },
+  { to: '/operations', icon: PlayCircle, label: 'Operations', moduleId: 'operations' },
+  { to: '/risks', icon: Shield, label: 'Risks', moduleId: 'risks' },
+  { to: '/reports', icon: FileText, label: 'Reports', moduleId: 'reports' },
 ]
 
 const bottomItems = [
@@ -32,6 +34,8 @@ const bottomItems = [
 
 export default function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useUIStore()
+  const { enabledModules } = useModuleStore()
+  const visibleNavItems = navItems.filter((item) => !item.moduleId || enabledModules[item.moduleId])
 
   return (
     <aside
@@ -47,7 +51,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 space-y-1">
-        {navItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
