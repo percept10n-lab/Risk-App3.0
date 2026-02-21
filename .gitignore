@@ -30,6 +30,7 @@ test_*.py
 # IDE
 .vscode/
 .idea/
+.claude/worktrees/
 
 # OS
 .DS_Store
